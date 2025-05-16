@@ -41,7 +41,7 @@ echo -n <USER>:<TOKEN> | base64
 
 ## create dockercongig secret
 ```bash
-kubectl create secret docker-registry registry-credentials --from-file=.dockerconfigjson=k8s/.dockerconfig.json
+kubectl create secret docker-registry registry-credentials --from-file=.dockerconfigjson=.dockerconfig.json
 ```
 
 ## install helm
