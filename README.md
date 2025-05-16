@@ -44,6 +44,18 @@ echo -n <USER>:<TOKEN> | base64
 kubectl create secret docker-registry registry-credentials --from-file=.dockerconfigjson=.dockerconfig.json
 ```
 
+
+# Deployment
+
+## minikube
+
+```bash
+minikube addons enable ingress
+```
+
+
+
+
 ## install helm
 
 ```bash
@@ -62,7 +74,6 @@ helm install \
 cert-manager jetstack/cert-manager \
 --namespace cert-manager \
 --create-namespace \
---version v1.14.5 \
 --set installCRDs=true
 ```
 
