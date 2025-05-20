@@ -2,8 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: postgres-deployment
-  name: postgres
+    app: postgres
+  name:  postgres-deployment
 spec:
   replicas: 1
   selector:
