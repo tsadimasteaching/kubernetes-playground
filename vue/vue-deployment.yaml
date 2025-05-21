@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  vue-deployment
+  namespace: default
+  labels:
+    app: vue
+spec:
+  selector:
+    matchLabels:
+      app: vue
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vue
+    spec:
+      containers:
+      - name:  vue
+        image:  ghcr.io/tsadimas/ds-vue:latest
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        ports:
+        - containerPort: 80
+          name:  vue
+      imagePullSecrets:
+      - name: registry-credentials
