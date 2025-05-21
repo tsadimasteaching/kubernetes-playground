@@ -7,7 +7,7 @@ echo "✅ kubectx, kubens, fzf, and k9s installed successfully"
 sudo apt-get install fzf -y
 
 
-
+echo 'alias c=clear' >> /home/$USER/.bashrc
 echo 'alias k="kubectl"' >> /home/$USER/.bashrc
 echo 'alias kga="kubectl get all"' >> /home/$USER/.bashrc
 echo 'alias kgn="kubectl get all --all-namespaces"' >> /home/$USER/.bashrc
