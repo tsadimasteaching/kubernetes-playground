@@ -6,7 +6,6 @@ metadata:
   labels:
     pvc: db
 spec:
-  storageClassName: standard
   resources:
     requests:
       storage: 100Mi
