@@ -10,13 +10,19 @@ chmod 700 get_helm.sh
 ## install cert-manager
 
 ```bash
-helm repo add jetstack https://charts.jetstack.io --force-update
-
 helm install \
-cert-manager jetstack/cert-manager \
+cert-manager oci://quay.io/jetstack/charts/cert-manager \
+--version v1.19.2 \
 --namespace cert-manager \
 --create-namespace \
---set installCRDs=true
+--set crds.enabled=true
+```
+
+## Patch traefik
+* get private ip of VM, e.g. 172.17.0.5
+* patch traefik svc to this external ip
+```bash
+kubectl patch svc traefik -n traefik -p '{"spec":{"externalIPs":["172.17.0.5"]}}'
 ```
 
 ## create cert-issuer
