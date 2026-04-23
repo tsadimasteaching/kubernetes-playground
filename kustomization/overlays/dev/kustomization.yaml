@@ -13,6 +13,7 @@ commonLabels:
   environment: dev
 
 resources:
+  - namespace.yaml
   - ../../base
 
 # Generates a ConfigMap named "webapp-config" (before prefix/hash are applied).
