@@ -3,7 +3,10 @@ echo "✅ Kubectl and Helm installed successfully"
 
 curl -sS https://webi.sh/k9s | sh
 
-echo "✅ kubectx, kubens, fzf, and k9s installed successfully"
+curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+sudo mv kustomize /usr/local/bin/
+
+echo "✅ kubectx, kubens, fzf, k9s, and kustomize installed successfully"
 sudo apt-get install fzf -y
 
 
