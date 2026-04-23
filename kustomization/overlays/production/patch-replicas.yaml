@@ -1,0 +1,19 @@
+# Strategic merge patch — only the fields listed here are changed;
+# everything else in the Deployment is preserved from the base.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+spec:
+  replicas: 3
+  template:
+    spec:
+      containers:
+        - name: webapp
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

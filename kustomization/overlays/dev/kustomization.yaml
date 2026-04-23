@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# All resource names get the "dev-" prefix, e.g. Deployment "webapp" → "dev-webapp".
+# The generated ConfigMap becomes "dev-webapp-config-<hash>".
+# Kustomize automatically rewrites the envFrom reference in the Deployment.
+namePrefix: dev-
+
+namespace: dev
+
+# Merged on top of the base commonLabels (app, managed-by).
+commonLabels:
+  environment: dev
+
+resources:
+  - ../../base
+
+# Generates a ConfigMap named "webapp-config" (before prefix/hash are applied).
+# The env file contributes key=value pairs; literals override or add individual keys.
+configMapGenerator:
+  - name: webapp-config
+    envs:
+      - app.env
+    literals:
+      - LOG_LEVEL=debug
+
+patches:
+  # JSON 6902 patch — rewrite the ingress hostname for dev.
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.webapp.example.com
+    target:
+      kind: Ingress
+      name: webapp

@@ -1,0 +1,46 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# All resource names get the "-prod" suffix, e.g. Deployment "webapp" → "webapp-prod".
+# The generated ConfigMap becomes "webapp-config-<hash>-prod".
+# Kustomize automatically rewrites the envFrom reference in the Deployment.
+nameSuffix: -prod
+
+namespace: production
+
+# Merged on top of the base commonLabels (app, managed-by).
+commonLabels:
+  environment: production
+
+resources:
+  - ../../base
+
+# Generates a ConfigMap named "webapp-config" (before suffix/hash are applied).
+configMapGenerator:
+  - name: webapp-config
+    envs:
+      - app.env
+    literals:
+      - LOG_LEVEL=warn
+
+patches:
+  # Strategic merge patch — scale up and increase resource limits for production.
+  - path: patch-replicas.yaml
+    target:
+      kind: Deployment
+      name: webapp
+
+  # JSON 6902 patch — production ingress: HTTPS-only with TLS termination at Traefik.
+  - patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: webapp.example.com
+      - op: replace
+        path: /metadata/annotations/traefik.ingress.kubernetes.io~1router.entrypoints
+        value: websecure
+      - op: add
+        path: /metadata/annotations/traefik.ingress.kubernetes.io~1router.tls
+        value: "true"
+    target:
+      kind: Ingress
+      name: webapp
