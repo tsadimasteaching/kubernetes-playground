@@ -70,9 +70,11 @@ kubectl apply -k overlays/dev           # render and apply in one step
 └── overlays/
     ├── dev/                     # Development overlay
     │   ├── kustomization.yaml   #   namePrefix, commonLabels, configMapGenerator
+    │   ├── namespace.yaml       #   creates the dev namespace
     │   └── app.env              #   dev-specific env vars
     └── production/              # Production overlay
         ├── kustomization.yaml   #   nameSuffix, commonLabels, configMapGenerator
+        ├── namespace.yaml       #   creates the production namespace
         ├── app.env              #   production env vars
         └── patch-replicas.yaml  #   strategic merge patch for resources/replicas
 ```

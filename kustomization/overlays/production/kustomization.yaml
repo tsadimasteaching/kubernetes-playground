@@ -13,6 +13,7 @@ commonLabels:
   environment: production
 
 resources:
+  - namespace.yaml
   - ../../base
 
 # Generates a ConfigMap named "webapp-config" (before suffix/hash are applied).
