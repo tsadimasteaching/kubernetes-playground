@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      # Writes the static page into the volume only if it is not there yet,
+      # so the content survives pod restarts.
+      initContainers:
+        - name: init-content
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              [ -f /data/index.html ] || echo '<h1>Hello from nginx on Kubernetes!</h1><p>Served from a PersistentVolume.</p>' > /data/index.html
+          volumeMounts:
+            - name: html
+              mountPath: /data
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      volumes:
+        - name: html
+          persistentVolumeClaim:
+            claimName: nginx-html
