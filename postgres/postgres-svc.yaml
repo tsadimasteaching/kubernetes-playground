@@ -1,3 +1,4 @@
+# Regular Service: what the applications use (jdbc:postgresql://postgres:5432/dsdb).
 apiVersion: v1
 kind: Service
 metadata:
@@ -9,6 +10,25 @@ spec:
     - port: 5432
       protocol: TCP
       targetPort: 5432
+      name: postgres
   selector:
     app: postgres
   type: ClusterIP
+---
+# Headless Service (clusterIP: None) required by the StatefulSet (spec.serviceName).
+# It gives each pod its own DNS record, e.g. postgres-0.postgres-headless.default.svc.cluster.local
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: postgres
+  name: postgres-headless
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      protocol: TCP
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: postgres

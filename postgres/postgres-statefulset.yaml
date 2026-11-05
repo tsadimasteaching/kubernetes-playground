@@ -1,0 +1,72 @@
+# PostgreSQL as a StatefulSet — see "Why PostgreSQL runs as a StatefulSet" in the README.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  # Headless Service that gives the pod a stable DNS name: postgres-0.postgres-headless
+  serviceName: postgres-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_PASSWORD
+              value: pass123
+            - name: POSTGRES_USER
+              value: dbuser
+            - name: POSTGRES_DB
+              value: dsdb
+            # Keep the data in a subdirectory of the volume: some storage backends
+            # create a lost+found directory at the volume root, which makes initdb fail.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+              name: postgres
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "dbuser", "-d", "dsdb"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "dbuser", "-d", "dsdb"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+  # One PersistentVolumeClaim per pod, created automatically: data-postgres-0.
+  # It is NOT deleted when the StatefulSet is deleted, so the data survives.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: postgres
+      spec:
+        # No storageClassName: use the cluster's default StorageClass
+        # ("standard" on minikube).
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi

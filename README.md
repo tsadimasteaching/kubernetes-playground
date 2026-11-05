@@ -8,7 +8,7 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 .
 ├── .devcontainer/      # Dev container / GitHub Codespaces setup
 ├── cert/               # cert-manager ClusterIssuer (self-signed)
-├── postgres/           # PVC, Deployment, Service for PostgreSQL
+├── postgres/           # StatefulSet and Services for PostgreSQL
 ├── spring/             # Spring Boot Deployment, Service, Ingress (HTTP and HTTPS)
 ├── vue/                # Vue frontend Deployment, Service, Ingress
 └── kustomization/      # Kustomize base/overlay demo — see its own README
@@ -152,7 +152,7 @@ Apply the tiers in order — the database first, since Spring connects to it on 
 
 ```bash
 kubectl apply -f postgres/
-kubectl get pods -w          # wait until postgres is Running
+kubectl rollout status statefulset/postgres   # wait until postgres-0 is Ready
 
 kubectl apply -f spring/spring-deployment.yaml -f spring/spring-svc.yaml -f spring/spring-ingress.yaml
 kubectl apply -f vue/
@@ -171,6 +171,34 @@ kubectl logs deploy/spring-deployment
 The Spring pod becomes *Ready* only once its readiness probe (`/actuator/health/readiness`) succeeds, which can take a minute.
 
 > **Note:** the database credentials are written in plain text in the manifests to keep the example simple. In a real deployment, store them in a `Secret` and reference them with `valueFrom.secretKeyRef`.
+
+### Why PostgreSQL runs as a StatefulSet
+
+Spring and Vue are **stateless**: any pod is as good as any other, so a `Deployment` can create, replace and scale them freely. A database is **stateful**: the pod is tied to its data on disk. A `StatefulSet` gives exactly the guarantees a database needs:
+
+| | Deployment | StatefulSet |
+| --- | --- | --- |
+| **Pod name** | random, changes on every restart (`postgres-deployment-7c9f…`) | stable and ordered (`postgres-0`, `postgres-1`, …) |
+| **Storage** | all replicas share the PVC you create by hand | each pod gets **its own** PVC from `volumeClaimTemplates` (`data-postgres-0`), re-attached to the same pod after restarts |
+| **Updates / restarts** | rolling update starts the new pod **before** stopping the old one — two Postgres processes on the same data directory can corrupt it | the old pod is stopped **before** the new one starts; never two pods with the same identity |
+| **Network identity** | only through the Service | every pod also has its own DNS name via a headless Service (`postgres-0.postgres-headless`) |
+| **Deleting it** | a hand-made PVC stays, but nothing links it to a pod | PVCs are **kept** when the StatefulSet is deleted, so the data survives |
+
+The stable names and per-pod storage are also what makes database replication possible (e.g. `postgres-0` as primary, `postgres-1` as replica). For production, an operator such as [CloudNativePG](https://cloudnative-pg.io/) builds on these primitives and adds backups, failover and upgrades.
+
+Inspect it:
+
+```bash
+kubectl get statefulset,pods,pvc -l app=postgres
+kubectl exec -it postgres-0 -- psql -U dbuser -d dsdb
+```
+
+To remove the database **including its data**, delete the PVC explicitly:
+
+```bash
+kubectl delete -f postgres/
+kubectl delete pvc data-postgres-0
+```
 
 ---
 
@@ -298,5 +326,6 @@ Tools that make working with a cluster easier than plain `kubectl`. All of them 
 - [cert-manager installation with Helm](https://cert-manager.io/docs/installation/helm/)
 - [Troubleshooting cert-manager](https://cert-manager.io/docs/troubleshooting/)
 - [Pull an image from a private registry](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/)
+- [StatefulSets](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
 - [Spring Boot health probes](https://www.baeldung.com/spring-liveness-readiness-probes)
 - [Kustomize](https://kustomize.io/)
