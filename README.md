@@ -31,9 +31,9 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 
 Open the repository in GitHub Codespaces or in VS Code with *Dev Containers: Reopen in Container*. The container:
 
-- uses the `devcontainers/universal` image, which ships `docker`, `kubectl`, `helm` and `minikube`
+- is based on **Ubuntu 24.04** (`devcontainers/base:ubuntu-24.04`) and installs `docker` (docker-in-docker), `kubectl` 1.37, `helm` and `minikube` via devcontainer features
 - installs `k9s`, `kustomize` and `fzf` ([startup_script.sh](.devcontainer/startup_script.sh))
-- runs `minikube start` automatically on attach
+- runs `minikube start --kubernetes-version=v1.37.0` automatically on attach
 - adds these shell aliases:
 
 | Alias | Command |
@@ -60,7 +60,7 @@ chmod 700 get_helm.sh
 Then start minikube:
 
 ```bash
-minikube start
+minikube start --kubernetes-version=v1.37.0
 ```
 
 ### Enable the ingress controller

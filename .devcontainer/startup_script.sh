@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kubectl, helm, minikube and docker come with the devcontainer image (devcontainers/universal).
+# kubectl, helm, minikube and docker are installed by the devcontainer features (see devcontainer.json).
 
 curl -sS https://webi.sh/k9s | sh
 
