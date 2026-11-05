@@ -11,7 +11,7 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 ├── nginx/              # Minimal Deployment + Service + PVC example — see nginx/README.md
 ├── postgres/           # StatefulSet and Services for PostgreSQL — see postgres/README.md
 ├── spring/             # Spring Boot Deployment, Service, Ingress (HTTP and HTTPS) — see spring/README.md
-├── vue/                # Vue frontend Deployment, Service, Ingress
+├── vue/                # Vue frontend Deployment, Service, Ingress — see vue/README.md
 └── kustomization/      # Kustomize base/overlay demo — see its own README
 ```
 
@@ -206,33 +206,17 @@ The Spring pod becomes *Ready* only once its readiness probe (`/actuator/health/
 
 > **Note:** the database credentials are written in plain text in the manifests to keep the example simple. In a real deployment, store them in a `Secret` and reference them with `valueFrom.secretKeyRef`.
 
-### Why PostgreSQL runs as a StatefulSet
+### Per-component details
 
-Spring and Vue are **stateless**: any pod is as good as any other, so a `Deployment` can create, replace and scale them freely. A database is **stateful**: the pod is tied to its data on disk. A `StatefulSet` gives exactly the guarantees a database needs:
+Each directory has its own README with prerequisites, testing and troubleshooting:
 
-| | Deployment | StatefulSet |
+| Component | README | Highlights |
 | --- | --- | --- |
-| **Pod name** | random, changes on every restart (`postgres-deployment-7c9f…`) | stable and ordered (`postgres-0`, `postgres-1`, …) |
-| **Storage** | all replicas share the PVC you create by hand | each pod gets **its own** PVC from `volumeClaimTemplates` (`data-postgres-0`), re-attached to the same pod after restarts |
-| **Updates / restarts** | rolling update starts the new pod **before** stopping the old one — two Postgres processes on the same data directory can corrupt it | the old pod is stopped **before** the new one starts; never two pods with the same identity |
-| **Network identity** | only through the Service | every pod also has its own DNS name via a headless Service (`postgres-0.postgres-headless`) |
-| **Deleting it** | a hand-made PVC stays, but nothing links it to a pod | PVCs are **kept** when the StatefulSet is deleted, so the data survives |
-
-The stable names and per-pod storage are also what makes database replication possible (e.g. `postgres-0` as primary, `postgres-1` as replica). For production, an operator such as [CloudNativePG](https://cloudnative-pg.io/) builds on these primitives and adds backups, failover and upgrades.
-
-Inspect it:
-
-```bash
-kubectl get statefulset,pods,pvc -l app=postgres
-kubectl exec -it postgres-0 -- psql -U dbuser -d dsdb
-```
-
-To remove the database **including its data**, delete the PVC explicitly:
-
-```bash
-kubectl delete -f postgres/
-kubectl delete pvc data-postgres-0
-```
+| PostgreSQL | [postgres/README.md](postgres/README.md) | why it runs as a **StatefulSet**, connecting with `psql`, data persistence |
+| Spring backend | [spring/README.md](spring/README.md) | probes, how the HTTP/HTTPS **Ingresses** work and how to test them |
+| Vue frontend | [vue/README.md](vue/README.md) | Ingress for `vue.local`, testing with and without Traefik |
+| TLS | [cert/README.md](cert/README.md) | cert-manager step by step |
+| nginx (standalone) | [nginx/README.md](nginx/README.md) | Deployment + PVC example, no Ingress |
 
 ---
 
@@ -275,11 +259,11 @@ curl http://spring.local/actuator/health
 
 ### Option C — Without an Ingress
 
-Port-forward directly to the Services, bypassing Traefik:
+Port-forward directly to the Services, bypassing Traefik. Each command keeps running, so use a separate terminal for each, and stop the Traefik port-forward first because it also uses 8080:
 
 ```bash
-kubectl port-forward svc/spring 8080:8080
-kubectl port-forward svc/vue-svc 9000:9000
+kubectl port-forward svc/spring 8080:8080      # terminal 1 → http://localhost:8080/actuator/health
+kubectl port-forward svc/vue-svc 9000:9000     # terminal 2 → http://localhost:9000/
 ```
 
 ---
