@@ -10,7 +10,7 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 ├── cert/               # cert-manager ClusterIssuers — see cert/README.md
 ├── nginx/              # Minimal Deployment + Service + PVC example — see nginx/README.md
 ├── postgres/           # StatefulSet and Services for PostgreSQL — see postgres/README.md
-├── spring/             # Spring Boot Deployment, Service, Ingress (HTTP and HTTPS)
+├── spring/             # Spring Boot Deployment, Service, Ingress (HTTP and HTTPS) — see spring/README.md
 ├── vue/                # Vue frontend Deployment, Service, Ingress
 └── kustomization/      # Kustomize base/overlay demo — see its own README
 ```
