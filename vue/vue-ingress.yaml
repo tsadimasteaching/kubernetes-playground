@@ -3,13 +3,15 @@ kind: Ingress
 metadata:
   name: vue-ingress
 spec:
+  ingressClassName: nginx
   rules:
-  - http:
-      paths:
-      - path: /
-        pathType: ImplementationSpecific
-        backend:
-          service:
-            name: vue-svc
-            port:
-              name: vue
+    - host: vue.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vue-svc
+                port:
+                  name: vue

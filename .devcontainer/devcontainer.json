@@ -1,6 +1,10 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
 {
+	"name": "kubernetes-playground",
+	// Default Codespaces image: ships docker, kubectl, helm and minikube.
+	"image": "mcr.microsoft.com/devcontainers/universal:2",
+
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 

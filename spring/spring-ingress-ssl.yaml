@@ -1,16 +1,19 @@
+# HTTPS variant of spring-ingress.yaml — apply one or the other, not both.
+# Requires cert-manager and the ClusterIssuer in cert/Cluster-issuer.yaml.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: spring-ingress-ssl
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    cert-manager.io/cluster-issuer: selfsigned-issuer
 spec:
+  ingressClassName: nginx
   tls:
     - hosts:
         - spring.local
       secretName: spring-tls-secret
   rules:
-    - host: demo.local
+    - host: spring.local
       http:
         paths:
           - path: /
