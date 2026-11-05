@@ -33,7 +33,7 @@ Open the repository in GitHub Codespaces or in VS Code with *Dev Containers: Reo
 
 - is based on **Ubuntu 24.04** (`devcontainers/base:ubuntu-24.04`) and installs `docker` (docker-in-docker), `kubectl` 1.37, `helm` and `minikube` via devcontainer features
 - installs `k9s`, `kustomize` and `fzf` ([startup_script.sh](.devcontainer/startup_script.sh))
-- runs `minikube start --kubernetes-version=v1.37.0` automatically on attach
+- starts minikube (Kubernetes v1.37.0) with the ingress addon on every container start, once Docker is ready ([start_minikube.sh](.devcontainer/start_minikube.sh)). If the cluster is not up, check the log with *Codespaces: View Creation Log* or run `bash .devcontainer/start_minikube.sh`
 - adds these shell aliases:
 
 | Alias | Command |
@@ -65,7 +65,7 @@ minikube start --kubernetes-version=v1.37.0
 
 ### Enable the ingress controller
 
-In both cases, enable the NGINX ingress addon:
+In the dev container this is done automatically. On a local machine, enable the NGINX ingress addon:
 
 ```bash
 minikube addons enable ingress

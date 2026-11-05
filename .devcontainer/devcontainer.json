@@ -19,8 +19,9 @@
 
 	// Installs k9s, kustomize, fzf and shell aliases.
 	"postCreateCommand": "/bin/bash -c .devcontainer/startup_script.sh",
-	// Kubernetes version of the minikube cluster (keep in sync with kubectl above).
-	"postAttachCommand": "minikube start --kubernetes-version=v1.37.0",
+	// Waits for Docker, then starts minikube + ingress addon.
+	// Kubernetes version of the cluster: K8S_VERSION in start_minikube.sh (keep in sync with kubectl above).
+	"postStartCommand": "/bin/bash .devcontainer/start_minikube.sh",
 
 	// Configure tool-specific properties.
 	"customizations": {
