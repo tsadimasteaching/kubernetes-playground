@@ -42,6 +42,17 @@ patches:
       - op: add
         path: /metadata/annotations/traefik.ingress.kubernetes.io~1router.tls
         value: "true"
+      # cert-manager issues the certificate (ClusterIssuer from cert/cluster-issuer.yaml).
+      # Without cert-manager, Traefik falls back to its built-in default certificate.
+      - op: add
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+        value: selfsigned-issuer
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - webapp.example.com
+            secretName: webapp-tls
     target:
       kind: Ingress
       name: webapp

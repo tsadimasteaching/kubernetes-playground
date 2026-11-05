@@ -19,7 +19,7 @@
 
 	// Installs k9s, kustomize, fzf and shell aliases.
 	"postCreateCommand": "/bin/bash -c .devcontainer/startup_script.sh",
-	// Waits for Docker, then starts minikube + ingress addon.
+	// Waits for Docker, starts minikube and installs the Traefik ingress controller.
 	// Kubernetes version of the cluster: K8S_VERSION in start_minikube.sh (keep in sync with kubectl above).
 	"postStartCommand": "/bin/bash .devcontainer/start_minikube.sh",
 

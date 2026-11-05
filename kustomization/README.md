@@ -133,6 +133,7 @@ dev output       →  envFrom.configMapRef.name: dev-webapp-config-6g7k9m2t
 
 ## Prerequisites
 
-- A Kubernetes cluster with Traefik installed as the ingress controller
+- A Kubernetes cluster with Traefik installed as the ingress controller (see [main README → Install the Traefik ingress controller](../README.md#install-the-traefik-ingress-controller))
+- For the production overlay's TLS certificate: cert-manager and the `selfsigned-issuer` ClusterIssuer (see [cert/README.md](../cert/README.md)). Without them Traefik serves its built-in default certificate
 - `kubectl` configured to point at the target cluster
 - DNS entries (or `/etc/hosts` for local) pointing overlay hostnames at your cluster

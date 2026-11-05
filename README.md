@@ -7,8 +7,9 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 ```text
 .
 ├── .devcontainer/      # Dev container / GitHub Codespaces setup
-├── cert/               # cert-manager ClusterIssuer (self-signed)
-├── postgres/           # StatefulSet and Services for PostgreSQL
+├── cert/               # cert-manager ClusterIssuers — see cert/README.md
+├── nginx/              # Minimal Deployment + Service + PVC example — see nginx/README.md
+├── postgres/           # StatefulSet and Services for PostgreSQL — see postgres/README.md
 ├── spring/             # Spring Boot Deployment, Service, Ingress (HTTP and HTTPS)
 ├── vue/                # Vue frontend Deployment, Service, Ingress
 └── kustomization/      # Kustomize base/overlay demo — see its own README
@@ -34,7 +35,7 @@ Open the repository in GitHub Codespaces or in VS Code with *Dev Containers: Reo
 
 - is based on **Ubuntu 24.04** (`devcontainers/base:ubuntu-24.04`) and installs `docker` (docker-in-docker), `kubectl` 1.37, `helm` and `minikube` via devcontainer features
 - installs `k9s`, `kustomize` and `fzf` ([startup_script.sh](.devcontainer/startup_script.sh))
-- starts minikube (Kubernetes v1.37.0) with the ingress addon on every container start, once Docker is ready ([start_minikube.sh](.devcontainer/start_minikube.sh)). If the cluster is not up, check the log with *Codespaces: View Creation Log* or run `bash .devcontainer/start_minikube.sh`
+- on every container start, once Docker is ready, starts minikube (Kubernetes v1.37.0), makes sure minikube's NGINX ingress addon is disabled and installs the Traefik ingress controller with Helm ([start_minikube.sh](.devcontainer/start_minikube.sh)). If the cluster is not up, check the log with *Codespaces: View Creation Log* or run `bash .devcontainer/start_minikube.sh`
 - adds these shell aliases:
 
 | Alias | Command |
@@ -64,14 +65,47 @@ Then start minikube:
 minikube start --kubernetes-version=v1.37.0
 ```
 
-### Enable the ingress controller
+### Install the Traefik ingress controller
 
-In the dev container this is done automatically. On a local machine, enable the NGINX ingress addon:
+An `Ingress` is only a set of routing rules. An **ingress controller** reads those rules and actually serves the traffic. This repository uses [Traefik](https://doc.traefik.io/traefik/), and every Ingress here sets `ingressClassName: traefik`.
+
+In the dev container Traefik is installed automatically. On a local machine:
 
 ```bash
-minikube addons enable ingress
-kubectl get pods -n ingress-nginx   # wait until the controller is Running
+helm repo add traefik https://traefik.github.io/charts --force-update
+
+helm upgrade --install traefik traefik/traefik \
+  --namespace traefik \
+  --create-namespace \
+  --wait
 ```
+
+Verify:
+
+```bash
+kubectl get pods -n traefik          # traefik-xxxxx   1/1   Running
+kubectl get ingressclass             # traefik   traefik.io/ingress-controller
+kubectl get svc -n traefik traefik   # type LoadBalancer, ports 80 and 443
+```
+
+The chart's defaults are enough here:
+
+| Default | Meaning |
+| --- | --- |
+| IngressClass `traefik`, marked as default | Ingresses with `ingressClassName: traefik`, or with no class at all, are served by Traefik |
+| entrypoint `web` → port 80 | HTTP. Selected with the annotation `traefik.ingress.kubernetes.io/router.entrypoints: web` |
+| entrypoint `websecure` → port 443 | HTTPS. Selected with `router.entrypoints: websecure` and `router.tls: "true"` |
+| Service type `LoadBalancer` | on minikube it gets an external IP only while `minikube tunnel` runs (see [section 4](#4-access-the-application)) |
+
+> Use only **one** ingress controller. If you enabled the NGINX addon earlier (`minikube addons enable ingress`), disable it. Otherwise two controllers compete for the same Ingresses. The dev container does this automatically. On a local machine:
+>
+> ```bash
+> minikube addons disable ingress
+> ```
+>
+> To re-run the dev container's setup by hand (start minikube, disable NGINX, install Traefik): `bash .devcontainer/start_minikube.sh`.
+
+To remove Traefik: `helm uninstall traefik -n traefik`.
 
 ---
 
@@ -204,30 +238,44 @@ kubectl delete pvc data-postgres-0
 
 ## 4. Access the application
 
-The Ingresses route by hostname:
+Traefik routes requests by **hostname**:
 
-| Host | Service |
-| --- | --- |
-| `spring.local` | `spring` (port 8080) |
-| `vue.local` | `vue-svc` (port 9000) |
+| Host | Ingress | Service |
+| --- | --- | --- |
+| `spring.local` | `spring-ingress` (HTTP) or `spring-ingress-ssl` (HTTPS) | `spring` (port 8080) |
+| `vue.local` | `vue-ingress` (HTTP) | `vue-svc` (port 9000) |
 
-Point the hostnames at the cluster in `/etc/hosts`:
+### Option A — Port-forward to Traefik (works everywhere, including Codespaces)
 
 ```bash
-echo "$(minikube ip) spring.local vue.local" | sudo tee -a /etc/hosts
+kubectl port-forward -n traefik svc/traefik 8080:80 8443:443
 ```
 
-> With the docker driver on macOS/Windows, `minikube ip` is not reachable from the host. Run `minikube tunnel` in a separate terminal and use `127.0.0.1` in `/etc/hosts` instead.
-
-Then:
+In a second terminal, point the hostnames at your machine and send requests through Traefik:
 
 ```bash
+echo "127.0.0.1 spring.local vue.local" | sudo tee -a /etc/hosts
+
+curl http://spring.local:8080/actuator/health
+curl http://vue.local:8080/
+```
+
+On a local machine you can also open <http://vue.local:8080> in the browser.
+
+> In Codespaces, the forwarded URL (`https://<name>-8080.app.github.dev`) sends a different `Host` header, so Traefik's host rules do not match. Test from the Codespace terminal with `curl` as above, or use Option C.
+
+### Option B — `minikube tunnel` (local machine, standard ports)
+
+```bash
+minikube tunnel                       # keep it running in its own terminal
+kubectl get svc -n traefik traefik    # note the EXTERNAL-IP
+echo "<EXTERNAL-IP> spring.local vue.local" | sudo tee -a /etc/hosts
 curl http://spring.local/actuator/health
 ```
 
-and open <http://vue.local> in the browser.
+### Option C — Without an Ingress
 
-**Without an Ingress**, use port forwarding:
+Port-forward directly to the Services, bypassing Traefik:
 
 ```bash
 kubectl port-forward svc/spring 8080:8080
@@ -238,40 +286,22 @@ kubectl port-forward svc/vue-svc 9000:9000
 
 ## 5. HTTPS with cert-manager
 
-### Install cert-manager
+The step-by-step guide is in **[cert/README.md](cert/README.md)**: installing cert-manager with Helm, the ClusterIssuer, issuing a certificate through an Ingress, testing and troubleshooting. In short:
 
 ```bash
 helm repo add jetstack https://charts.jetstack.io --force-update
-
 helm install cert-manager jetstack/cert-manager \
-  --namespace cert-manager \
-  --create-namespace \
-  --set crds.enabled=true
+  --namespace cert-manager --create-namespace \
+  --version v1.21.3 --set crds.enabled=true
 
-kubectl get pods -n cert-manager   # wait until all pods are Running
-```
+kubectl apply -f cert/cluster-issuer.yaml                    # self-signed ClusterIssuer
 
-### Create the ClusterIssuer
+kubectl delete -f spring/spring-ingress.yaml --ignore-not-found
+kubectl apply -f spring/spring-ingress-ssl.yaml              # HTTPS Ingress for spring.local
+kubectl get certificate                                      # spring-tls-secret → READY True
 
-[cert/Cluster-issuer.yaml](cert/Cluster-issuer.yaml) defines a **self-signed** issuer named `selfsigned-issuer`:
-
-```bash
-kubectl apply -f cert/Cluster-issuer.yaml
-kubectl get clusterissuer
-```
-
-### Switch Spring to HTTPS
-
-```bash
-kubectl delete -f spring/spring-ingress.yaml
-kubectl apply -f spring/spring-ingress-ssl.yaml
-```
-
-The `cert-manager.io/cluster-issuer` annotation on the Ingress makes cert-manager issue a certificate into the `spring-tls-secret` secret:
-
-```bash
-kubectl get certificate
-curl -k https://spring.local/actuator/health   # -k: the certificate is self-signed
+kubectl port-forward -n traefik svc/traefik 8443:443 &
+curl -k --resolve spring.local:8443:127.0.0.1 https://spring.local:8443/actuator/health
 ```
 
 ---
@@ -285,7 +315,7 @@ kubectl kustomize kustomization/overlays/dev     # preview
 kubectl apply -k kustomization/overlays/dev      # apply
 ```
 
-> The demo's Ingress targets **Traefik**, not the NGINX ingress that minikube enables. The Deployment and Service work on minikube as is. To use the Ingress, install Traefik (`helm install traefik traefik/traefik` from the `https://traefik.github.io/charts` repo) or change the ingress class to `nginx`.
+> The demo's Ingress uses the same Traefik controller (`ingressClassName: traefik`). The production overlay serves HTTPS only and gets its certificate from cert-manager ([cert/README.md](cert/README.md#optional--kustomize-production-overlay)). Test it through the Traefik port-forward, e.g. `curl --resolve dev.webapp.example.com:8080:127.0.0.1 http://dev.webapp.example.com:8080/`.
 
 ---
 
@@ -322,7 +352,8 @@ Tools that make working with a cluster easier than plain `kubectl`. All of them 
 
 ## Links
 
-- [Set up Ingress on minikube](https://kubernetes.io/docs/tasks/access-application-cluster/ingress-minikube/)
+- [Traefik: install with Helm](https://doc.traefik.io/traefik/getting-started/install-traefik/)
+- [Traefik: Kubernetes Ingress provider and annotations](https://doc.traefik.io/traefik/providers/kubernetes-ingress/)
 - [cert-manager installation with Helm](https://cert-manager.io/docs/installation/helm/)
 - [Troubleshooting cert-manager](https://cert-manager.io/docs/troubleshooting/)
 - [Pull an image from a private registry](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/)

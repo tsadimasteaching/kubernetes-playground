@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Starts minikube once the Docker daemon (docker-in-docker) is ready.
+# Starts minikube once the Docker daemon (docker-in-docker) is ready,
+# then makes sure the Traefik ingress controller is installed.
 # Runs on every container start (postStartCommand in devcontainer.json).
 
 K8S_VERSION="${K8S_VERSION:-v1.37.0}"
@@ -17,8 +18,19 @@ fi
 
 if minikube status >/dev/null 2>&1; then
   echo "✅ minikube is already running"
-  exit 0
+else
+  minikube start --kubernetes-version="${K8S_VERSION}" || exit 1
+  echo "✅ minikube (Kubernetes ${K8S_VERSION}) is running"
 fi
 
-minikube start --kubernetes-version="${K8S_VERSION}" && minikube addons enable ingress \
-  && echo "✅ minikube (Kubernetes ${K8S_VERSION}) is running with the ingress addon"
+# Only one ingress controller: make sure minikube's NGINX addon is off
+# (older versions of this script enabled it). Safe to run when already disabled.
+minikube addons disable ingress >/dev/null 2>&1 && echo "✅ minikube NGINX ingress addon is disabled (Traefik is used instead)"
+
+if helm status traefik -n traefik >/dev/null 2>&1; then
+  echo "✅ Traefik is already installed"
+else
+  helm repo add traefik https://traefik.github.io/charts --force-update
+  helm upgrade --install traefik traefik/traefik --namespace traefik --create-namespace --wait \
+    && echo "✅ Traefik ingress controller installed (IngressClass: traefik)"
+fi

@@ -1,13 +1,17 @@
 # HTTPS variant of spring-ingress.yaml — apply one or the other, not both.
-# Requires cert-manager and the ClusterIssuer in cert/Cluster-issuer.yaml.
+# Requires cert-manager and the ClusterIssuer in cert/cluster-issuer.yaml (see cert/README.md).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: spring-ingress-ssl
   annotations:
+    # cert-manager issues a certificate for spec.tls into the secret spring-tls-secret
     cert-manager.io/cluster-issuer: selfsigned-issuer
+    # Traefik entrypoint "websecure" = port 443 (HTTPS), with TLS termination
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   tls:
     - hosts:
         - spring.local

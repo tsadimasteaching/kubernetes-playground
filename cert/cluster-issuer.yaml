@@ -1,0 +1,9 @@
+# Self-signed ClusterIssuer: works offline (minikube, Codespaces), no DNS or public IP needed.
+# Browsers will show a warning because the certificates are not signed by a trusted CA.
+# Used by: spring/spring-ingress-ssl.yaml, kustomization/overlays/production
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}

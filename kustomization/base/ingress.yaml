@@ -3,9 +3,9 @@ kind: Ingress
 metadata:
   name: webapp
   annotations:
-    kubernetes.io/ingress.class: traefik
     traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
+  ingressClassName: traefik
   rules:
     - host: webapp.example.com
       http:

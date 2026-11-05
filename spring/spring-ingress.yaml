@@ -1,9 +1,13 @@
+# HTTP Ingress for the Spring backend, served by Traefik (see README → "Install the Traefik ingress controller").
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: spring-ingress
+  annotations:
+    # Traefik entrypoint "web" = port 80 (HTTP)
+    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
-  ingressClassName: nginx
+  ingressClassName: traefik
   rules:
     - host: spring.local
       http:
