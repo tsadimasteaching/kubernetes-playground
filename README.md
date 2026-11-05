@@ -22,6 +22,7 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 4. [Access the application](#4-access-the-application)
 5. [HTTPS with cert-manager](#5-https-with-cert-manager)
 6. [Kustomize demo](#6-kustomize-demo)
+7. [Useful tools](#7-useful-tools)
 
 ---
 
@@ -257,6 +258,37 @@ kubectl apply -k kustomization/overlays/dev      # apply
 ```
 
 > The demo's Ingress targets **Traefik**, not the NGINX ingress that minikube enables. The Deployment and Service work on minikube as is. To use the Ingress, install Traefik (`helm install traefik traefik/traefik` from the `https://traefik.github.io/charts` repo) or change the ingress class to `nginx`.
+
+---
+
+## 7. Useful tools
+
+Tools that make working with a cluster easier than plain `kubectl`. All of them read your kubeconfig (`~/.kube/config`), so they work with minikube out of the box. Tools marked with ✅ are already installed in the dev container.
+
+### Terminal
+
+| Tool | What it does | Install / run |
+| --- | --- | --- |
+| [k9s](https://k9scli.io/) ✅ | Full-screen terminal UI: browse resources, view logs, exec into pods, port-forward, edit and delete — all with keyboard shortcuts | `k9s` (`:pods`, `:svc`, `:deploy`, `?` for help) |
+| [k10s](https://github.com/p10node/k10s) | k9s-inspired terminal UI with mouse support, on-screen action hints and instant search (`ctrl+p`); optional AI assistant with your own API key. New project | `go install github.com/p10node/k10s@latest` |
+| [sofka](https://github.com/nklmilojevic/sofka) | Rust terminal UI, a reimagining of k9s: bulk actions, background port-forwards, read-only mode, Helm inspector, Flux / Argo CD views. New project | `cargo install sofka` or prebuilt binary from GitHub releases |
+| [kubectx / kubens](https://github.com/ahmetb/kubectx) | Switch quickly between clusters (contexts) and namespaces | `kubectx minikube`, `kubens kube-system` |
+| [stern](https://github.com/stern/stern) | Tail logs from many pods at once, color-coded per pod | `stern spring` |
+| [krew](https://krew.sigs.k8s.io/) | Plugin manager for `kubectl` | `kubectl krew install <plugin>` |
+| [kube-ps1](https://github.com/jonmosco/kube-ps1) | Shows the current context and namespace in the shell prompt — helps avoid running commands against the wrong cluster | add to `~/.bashrc` |
+| [fzf](https://github.com/junegunn/fzf) ✅ | Fuzzy finder; makes `kubectx` / `kubens` interactive | — |
+
+### Graphical / web UIs
+
+| Tool | What it does | Install / run |
+| --- | --- | --- |
+| [Headlamp](https://headlamp.dev/) | Open-source Kubernetes UI from Kubernetes SIG UI; desktop app or in-cluster web app, extensible with plugins | desktop app, or Helm chart in the cluster |
+| [Radar](https://github.com/skyhook-io/radar) | Open-source web UI with a topology view, event timeline, resource browser, Helm and GitOps (Argo CD / Flux) views | `kubectl krew install radar` then `kubectl radar` (opens <http://localhost:9280>) |
+| [Lens](https://k8slens.dev/) | Popular desktop IDE for Kubernetes; free for personal and education use, paid subscription for commercial use | desktop app |
+| [Freelens](https://freelens.app/) | Free, open-source fork of Lens | desktop app |
+| [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) | The official web UI, shipped as a minikube addon | `minikube dashboard` (in Codespaces: `minikube dashboard --url`) |
+
+> Desktop apps (Headlamp, Lens, Freelens) run on your own machine, so they cannot see a minikube cluster that lives inside a Codespace. There, prefer the terminal tools, Radar or `minikube dashboard` — Codespaces forwards their ports to the browser.
 
 ---
 
