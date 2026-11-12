@@ -1,6 +1,6 @@
 # Kubernetes Playground
 
-Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a **Spring Boot** backend and a **Vue** frontend — running on [minikube](https://minikube.sigs.k8s.io/), plus a [Kustomize](kustomization/README.md) base/overlay demo.
+Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a **Spring Boot** backend and a **Vue** frontend — running on [minikube](https://minikube.sigs.k8s.io/) (or [MicroK8s](MICROK8S.md)), plus a [Kustomize](kustomization/README.md) base/overlay demo.
 
 ## Repository structure
 
@@ -12,7 +12,8 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 ├── postgres/           # StatefulSet and Services for PostgreSQL — see postgres/README.md
 ├── spring/             # Spring Boot Deployment, Service, Ingress (HTTP and HTTPS) — see spring/README.md
 ├── vue/                # Vue frontend Deployment, Service, Ingress — see vue/README.md
-└── kustomization/      # Kustomize base/overlay demo — see its own README
+├── kustomization/      # Kustomize base/overlay demo — see its own README
+└── MICROK8S.md         # Alternative setup: running the playground on MicroK8s
 ```
 
 ## Contents
@@ -64,6 +65,10 @@ Then start minikube:
 ```bash
 minikube start --kubernetes-version=v1.37.0
 ```
+
+### Option C — MicroK8s
+
+On a Linux machine or VM you can use [MicroK8s](https://microk8s.io/) instead of minikube. Installation, the required addons (`dns`, `hostpath-storage`), Traefik and how to reach it without `minikube tunnel` are described in **[MICROK8S.md](MICROK8S.md)**.
 
 ### Install the Traefik ingress controller
 
