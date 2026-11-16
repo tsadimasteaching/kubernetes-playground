@@ -120,8 +120,19 @@ Optional addons:
 | Addon | When you need it |
 | --- | --- |
 | `metallb` | to give the Traefik `LoadBalancer` Service a real external IP (see [section 5](#5-deploy-and-access-the-application)) |
-| `dashboard` | the Kubernetes Dashboard web UI |
 | `metrics-server` | `kubectl top pods` / `kubectl top nodes` |
+
+For a web UI, install [Headlamp](https://headlamp.dev/) with Helm. The `dashboard` addon is not available from MicroK8s 1.36 on, and the Kubernetes Dashboard project was archived in January 2026; Headlamp, from Kubernetes SIG UI, is its successor.
+
+```bash
+helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/ --force-update
+helm upgrade --install headlamp headlamp/headlamp --namespace kube-system
+kubectl create token headlamp -n kube-system          # paste this token into the login page
+kubectl port-forward -n kube-system svc/headlamp 8081:80
+# open http://localhost:8081
+```
+
+The chart binds the `headlamp` ServiceAccount to `cluster-admin`, which is fine for a lab cluster. Port 8081 leaves 8080 free for the Traefik port-forward of section 5.
 
 > **Do not enable the `ingress` addon.** Since MicroK8s 1.35 it installs Traefik (older releases installed the NGINX ingress controller), but as a separate instance that is managed by MicroK8s. This guide installs Traefik with Helm in [section 4](#4-install-the-traefik-ingress-controller), the same way as on minikube and Codespaces. Two controllers would compete for the same Ingresses. If you enabled it already: `microk8s disable ingress`.
 >
@@ -208,7 +219,7 @@ curl --resolve spring.local:30080:127.0.0.1 http://spring.local:30080/actuator/h
 | Default StorageClass | `standard` (built in) | `microk8s-hostpath` — enable `hostpath-storage` |
 | DNS | built in | enable `dns` |
 | LoadBalancer IP | `minikube tunnel` | `metallb` addon |
-| Dashboard | `minikube dashboard` | `microk8s enable dashboard` then `microk8s dashboard-proxy` |
+| Web UI | `minikube dashboard` | Headlamp with Helm (see [section 3](#3-enable-the-addons)) |
 | Local images | `minikube image load <img>` | `docker save <img> \| microk8s ctr image import -` |
 | Multi-node | `minikube start --nodes 2` | `microk8s add-node` on one machine, `microk8s join ...` on the others |
 
