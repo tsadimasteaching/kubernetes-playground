@@ -123,7 +123,7 @@ Optional addons:
 | `dashboard` | the Kubernetes Dashboard web UI |
 | `metrics-server` | `kubectl top pods` / `kubectl top nodes` |
 
-> **Do not enable the `ingress` addon.** It installs the NGINX ingress controller, while this repository uses Traefik. Two controllers would compete for the same Ingresses. If you enabled it already: `microk8s disable ingress`.
+> **Do not enable the `ingress` addon.** Since MicroK8s 1.35 it installs Traefik (older releases installed the NGINX ingress controller), but as a separate instance that is managed by MicroK8s. This guide installs Traefik with Helm in [section 4](#4-install-the-traefik-ingress-controller), the same way as on minikube and Codespaces. Two controllers would compete for the same Ingresses. If you enabled it already: `microk8s disable ingress`.
 >
 > The `cert-manager` addon exists too, but the [cert/README.md](cert/README.md) instructions install cert-manager with Helm — follow those so the version matches.
 
