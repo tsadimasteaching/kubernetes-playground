@@ -115,7 +115,7 @@ docker run -e JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=50 -Duser.timezone=Europe/
 
 ## Run locally (without building an image)
 
-Requirements: JDK 25 and Maven 3.9+ (both are already in the dev container), plus a running PostgreSQL:
+Requirements: JDK 25 and Maven 3.9+ on your machine (not included in this repository's dev container, which is set up for Kubernetes; to just build the image you only need Docker), plus a running PostgreSQL:
 
 ```bash
 docker run -d --name tickets-db \

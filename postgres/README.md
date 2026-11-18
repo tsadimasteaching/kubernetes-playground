@@ -23,20 +23,22 @@ kubectl get statefulset,pods,pvc,svc -l app=postgres
 
 ## Connect
 
+With the `psql` client inside the pod (works everywhere):
+
 ```bash
 kubectl exec -it postgres-0 -- psql -U dbuser -d dsdb
 ```
 
-From your machine, forward the port and leave the command running:
+Or from your machine: forward the port and leave the command running:
 
 ```bash
 kubectl port-forward svc/postgres 5432:5432
 ```
 
-In a second terminal:
+In a second terminal (needs a local `psql` client, e.g. `sudo apt-get install -y postgresql-client`; it is not in the dev container):
 
 ```bash
-psql -h localhost -U dbuser -d dsdb
+psql -h localhost -U dbuser -d dsdb      # password: pass123
 ```
 
 ## Show that the data persists

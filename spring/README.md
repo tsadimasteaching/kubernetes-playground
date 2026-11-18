@@ -71,7 +71,7 @@ kubectl exec postgres-0 -- psql -U dbuser -d dsdb -c 'select id, title, created_
 
 ## Testing
 
-Port-forward straight to the Service and leave it running:
+Port-forward straight to the Service and leave it running. If the Traefik port-forward from the main README still uses port 8080, stop it first:
 
 ```bash
 kubectl port-forward svc/spring 8080:8080

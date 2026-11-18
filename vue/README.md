@@ -38,7 +38,7 @@ kubectl get deploy,pods,svc -l app=vue
 kubectl get ingress
 ```
 
-On a public cluster, also apply `vue/vue-ingress-letsencrypt.yaml` as described in [cert/README.md](../cert/README.md). The two Ingresses use different hosts, so they can coexist.
+On a public cluster, also apply `vue/vue-ingress-letsencrypt.yaml` as described in [cert/README.md](../cert/README.md). Its two Ingresses (HTTPS, and HTTP for the redirect) use the public name, `vue-ingress` uses `vue.local`, so they can coexist.
 
 ---
 
@@ -126,7 +126,7 @@ On a local machine, add `127.0.0.1 vue.local` to `/etc/hosts` and open <http://v
 ```bash
 curl -I https://tickets.tsadimas.dns-cloud.net/                       # 200, trusted certificate
 curl -u alice:password https://tickets.tsadimas.dns-cloud.net/api/me
-curl -I http://tickets.tsadimas.dns-cloud.net/                        # 301 → https://
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://tickets.tsadimas.dns-cloud.net/   # 301 https://...
 ```
 
 Unknown paths such as `/actuator/health` return the app's `index.html`: nginx falls back to it for every path except `/api/`, so Spring's own endpoints are not reachable from outside.

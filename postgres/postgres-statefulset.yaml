@@ -1,4 +1,4 @@
-# PostgreSQL as a StatefulSet — see "Why PostgreSQL runs as a StatefulSet" in the README.
+# PostgreSQL as a StatefulSet — see "Why a StatefulSet and not a Deployment" in postgres/README.md.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

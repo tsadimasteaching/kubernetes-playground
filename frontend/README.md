@@ -29,7 +29,7 @@ Because the browser only talks to one origin, no CORS configuration is needed.
 
 ## Run locally
 
-Requirements: Node.js 22+ (24 recommended; it is already in the dev container) and the backend running on `http://localhost:8080` (see the [backend README](../backend/README.md)).
+Requirements: Node.js 22+ (24 recommended) on your machine (not included in this repository's dev container, which is set up for Kubernetes; to just build the image you only need Docker) and the backend running on `http://localhost:8080` (see the [backend README](../backend/README.md)).
 
 ```bash
 npm install

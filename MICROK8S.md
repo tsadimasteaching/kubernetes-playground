@@ -104,7 +104,7 @@ A fresh MicroK8s cluster is minimal. Enable the addons this repository needs:
 
 ```bash
 microk8s enable dns                 # CoreDNS — Services are found by name (e.g. spring → postgres)
-microk8s enable hostpath-storage    # default StorageClass — required by the postgres StatefulSet and the nginx PVC
+microk8s enable hostpath-storage    # default StorageClass — required by the postgres StatefulSet
 microk8s enable helm3               # only if microk8s helm is not already available
 ```
 
@@ -176,7 +176,12 @@ Then pick one way to reach Traefik:
 Identical to [README section 4, Option A](README.md#option-a--port-forward-to-traefik-works-everywhere-including-codespaces):
 
 ```bash
-kubectl port-forward -n traefik svc/traefik 8080:80 8443:443
+kubectl port-forward -n traefik svc/traefik 8080:80 8443:443     # keep it running
+```
+
+In a second terminal:
+
+```bash
 echo "127.0.0.1 vue.local" | sudo tee -a /etc/hosts
 curl -u alice:password http://vue.local:8080/api/me
 ```
@@ -265,7 +270,7 @@ curl --resolve vue.local:30080:127.0.0.1 -u alice:password http://vue.local:3008
 | DNS | built in | enable `dns` |
 | LoadBalancer IP | `minikube tunnel` | `metallb` addon (on cloud VMs: the node IP as `externalIPs`) |
 | Web UI | `minikube dashboard` | Headlamp with Helm (see [section 3](#3-enable-the-addons)) |
-| Local images | `minikube image load <img>` | `docker save <img> \| microk8s ctr image import -` |
+| Local images | `minikube image build` / `minikube image load <img>` | build with Docker (on the host or elsewhere), then `docker save <img> \| microk8s ctr image import -`. MicroK8s itself does not include Docker |
 | Multi-node | `minikube start --nodes 2` | `microk8s add-node` on one machine, `microk8s join ...` on the others |
 
 ---

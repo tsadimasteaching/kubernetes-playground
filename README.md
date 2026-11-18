@@ -165,7 +165,7 @@ docker push ghcr.io/<GITHUB-USERNAME>/cp-vue:2026
 
 ### Without a registry (minikube)
 
-Build straight into minikube's image store and point the Deployments at the local tag. Use a tag other than `latest`, because for `latest` Kubernetes always tries to pull from the registry:
+Build straight into minikube's image store. After deploying the app ([section 3](#3-deploy-the-application)), point the Deployments at the local tag. Use a tag other than `latest`, because for `latest` Kubernetes always tries to pull from the registry:
 
 ```bash
 (cd backend  && minikube image build -t tickets-backend:dev  -f Dockerfile.multistage .)
@@ -174,6 +174,8 @@ Build straight into minikube's image store and point the Deployments at the loca
 kubectl set image deployment/spring-deployment spring=tickets-backend:dev
 kubectl set image deployment/vue-deployment    vue=tickets-frontend:dev
 ```
+
+> `kubectl apply -f spring/` or `-f vue/vue-deployment.yaml` sets the image back to the ghcr.io one. To keep the local image, change `image:` in the YAML instead.
 
 On MicroK8s, see the *Local images* row in [MICROK8S.md](MICROK8S.md#6-differences-from-minikube).
 
@@ -323,7 +325,7 @@ kubectl apply -f vue/vue-ingress-letsencrypt.yaml          # set your host name 
 kubectl get certificate                                    # vue-letsencrypt-tls → READY True
 
 curl -I https://tickets.tsadimas.dns-cloud.net/            # 200, no -k needed
-curl -I http://tickets.tsadimas.dns-cloud.net/             # 301 → https://
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://tickets.tsadimas.dns-cloud.net/   # 301 https://...
 ```
 
 > Not on minikube or Codespaces: Let's Encrypt must reach Traefik from the internet on port 80. Use `vue.local` there.
@@ -355,7 +357,7 @@ Tools that make working with a cluster easier than plain `kubectl`. All of them 
 | [Radar](https://github.com/skyhook-io/radar) | Open-source web UI with a topology view, event timeline, resource browser, Helm and GitOps (Argo CD / Flux) views | `kubectl krew install radar` then `kubectl radar` (opens <http://localhost:9280>) |
 | [Lens](https://k8slens.dev/) | Popular desktop IDE for Kubernetes; free for personal and education use, paid subscription for commercial use | desktop app |
 | [Freelens](https://freelens.app/) | Free, open-source fork of Lens | desktop app |
-| [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) | The official web UI, shipped as a minikube addon | `minikube dashboard` (in Codespaces: `minikube dashboard --url`) |
+| [Kubernetes Dashboard](https://github.com/kubernetes/dashboard) | The former official web UI, **archived** in January 2026 (Headlamp is its successor). Still shipped as a minikube addon | `minikube dashboard` (in Codespaces: `minikube dashboard --url`) |
 
 > Desktop apps (Headlamp, Lens, Freelens) run on your own machine, so they cannot see a minikube cluster that lives inside a Codespace. There, prefer the terminal tools, Radar or `minikube dashboard` — Codespaces forwards their ports to the browser.
 

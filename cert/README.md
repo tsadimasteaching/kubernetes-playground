@@ -95,7 +95,8 @@ spec:
 
 ```bash
 kubectl apply -f vue/vue-ingress-letsencrypt.yaml
-kubectl get certificate,challenge -w     # vue-letsencrypt-tls → READY True, usually within a minute
+kubectl get certificate -w              # vue-letsencrypt-tls → READY True, usually within a minute (Ctrl+C to stop)
+kubectl get challenge                   # while it is pending: one Challenge per host name
 ```
 
 What happens (HTTP-01):
@@ -117,7 +118,7 @@ kubectl get secret vue-letsencrypt-tls -o jsonpath='{.data.tls\.crt}' | base64 -
 
 curl -I https://tickets.tsadimas.dns-cloud.net/                       # 200, no -k needed
 curl -u alice:password https://tickets.tsadimas.dns-cloud.net/api/me  # through nginx to Spring
-curl -I http://tickets.tsadimas.dns-cloud.net/                        # 301 → https://
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://tickets.tsadimas.dns-cloud.net/   # 301 https://...
 ```
 
 Open the site in the browser and log in as `alice` / `password`.
@@ -126,7 +127,7 @@ Open the site in the browser and log in as `alice` / `password`.
 
 [vue-ingress-letsencrypt.yaml](../vue/vue-ingress-letsencrypt.yaml) also contains:
 
-- a Traefik **Middleware** `redirect-https` (`redirectScheme: https`, `permanent: true` → status 301). Middlewares are Traefik CRDs, installed with the Traefik chart.
+- a Traefik **Middleware** `redirect-https` (`redirectScheme: https`, `permanent: true` → status 301 for GET, 308 for other methods, so `curl -I`, which sends HEAD, shows 308). Middlewares are Traefik CRDs, installed with the Traefik chart.
 - an Ingress `vue-ingress-letsencrypt-http` on the `web` entrypoint (port 80) for the same host, with the annotation `traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd` (`<namespace>-<name>@kubernetescrd`).
 
 Only this host is redirected. Renewals still work: cert-manager's temporary challenge Ingress has a longer path, so Traefik routes `/.well-known/acme-challenge/<token>` to the solver before the redirect catches it.

@@ -1,6 +1,6 @@
 # Public HTTPS Ingress for the Vue frontend with a Let's Encrypt certificate.
 # Only for a cluster reachable from the internet, with a DNS name pointing at Traefik
-# (see cert/README.md → "Let's Encrypt on a real cluster"). Change the host to your own.
+# (see cert/README.md). Change the host to your own (in spec.tls and in both Ingresses' rules).
 #
 # Only the frontend is public. The browser reaches the API through the frontend's nginx
 # (/api/* → Service spring:8080), so Spring itself needs no public Ingress.
