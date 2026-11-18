@@ -20,10 +20,10 @@ The manifests in this repository work unchanged on MicroK8s. Only the cluster se
 
 ### Ubuntu / Linux (snap)
 
-MicroK8s is distributed as a snap. Pick the channel that matches the Kubernetes version used in this repository (1.37):
+MicroK8s is distributed as a snap. This guide uses the 1.36 channel (the minikube and Codespaces setups in this repository use Kubernetes 1.37):
 
 ```bash
-sudo snap install microk8s --classic --channel=1.37/stable
+sudo snap install microk8s --classic --channel=1.36/stable
 ```
 
 > `snap info microk8s` lists the available channels. Use `latest/stable` if you just want the newest release.
@@ -183,24 +183,67 @@ curl http://spring.local:8080/actuator/health
 
 ### Option B — MetalLB (replaces `minikube tunnel`)
 
-MetalLB hands out IPs from a range you choose to `LoadBalancer` Services. Pick a few free addresses on the host's network (or the VM's network), for example:
+MetalLB hands out IPs from a range you choose to `LoadBalancer` Services. Traefik's Service is already of that type, so the address range is the only thing to configure.
+
+First find the node's subnet:
 
 ```bash
-microk8s enable metallb:10.64.140.43-10.64.140.49
-kubectl get svc -n traefik traefik      # EXTERNAL-IP is now e.g. 10.64.140.43
-echo "10.64.140.43 spring.local vue.local" | sudo tee -a /etc/hosts
+ip -4 addr show      # e.g. inet 192.168.1.50/24 on wlan0 → subnet 192.168.1.0/24
+ip route             # default via 192.168.1.1 dev wlan0
+```
+
+Pick a few addresses in that subnet that nothing else uses and that are outside the router's DHCP pool (often .100–.200, so e.g. .240–.250). `ping -c1 192.168.1.240` should get no reply. Then:
+
+```bash
+microk8s enable metallb:192.168.1.240-192.168.1.250
+kubectl get svc -n traefik traefik      # EXTERNAL-IP is now e.g. 192.168.1.240
+echo "192.168.1.240 spring.local vue.local" | sudo tee -a /etc/hosts
 curl http://spring.local/actuator/health
 ```
 
-> On a laptop, any unused range in the host's subnet works. In a Multipass VM, use addresses from the VM's subnet (`multipass info microk8s-vm` shows its IP) and add the `/etc/hosts` entry on the machine where you run `curl` or the browser.
+The addon also creates the `IPAddressPool` and `L2Advertisement` (layer 2 mode) in the `metallb-system` namespace, so nothing else is needed.
 
-### Option C — NodePort
+> - Use the subnet of *your* network. An address outside it can still answer on the MicroK8s host itself, but other machines cannot reach it.
+> - In a Multipass VM, use addresses from the VM's subnet (`multipass info microk8s-vm` shows its IP).
+> - Add the `/etc/hosts` entry on the machine where you run `curl` or the browser.
+> - Some Wi-Fi access points and university or corporate networks block the ARP replies that layer 2 mode relies on. If the IP works on the host but not from other devices, that is the likely cause.
+> - To change the range later: `microk8s disable metallb`, then enable it again with the new range.
+> - **Not on cloud VMs** (GCP, AWS, Azure): the cloud network only delivers traffic to IPs it assigned to the VM and ignores MetalLB's ARP replies. Use [Option C](#option-c--cloud-vm-node-ip-as-external-ip) instead. Never give MetalLB the node's own IP.
+
+### Option C — Cloud VM: node IP as external IP
+
+On a cloud VM (a `/32` address on `ens4`/`eth0` in `ip -4 addr show` is a typical sign), skip MetalLB (`microk8s disable metallb` if you enabled it) and let Traefik's Service accept traffic sent to the VM's internal IP. kube-proxy then forwards ports 80 and 443 on that IP to Traefik:
+
+```bash
+ip -4 addr show                         # e.g. inet 10.166.0.2/32 on ens4
+
+helm upgrade --install traefik traefik/traefik -n traefik \
+  --set "service.spec.externalIPs={10.166.0.2}" \
+  --wait
+
+kubectl get svc -n traefik traefik      # EXTERNAL-IP shows 10.166.0.2
+curl -H "Host: spring.local" http://10.166.0.2/actuator/health
+```
+
+> Extra Service fields go under `service.spec` — the chart rejects `service.externalIPs` or `service.type`.
+
+To reach it from your laptop:
+
+1. Allow `tcp:80,443` to the VM in the cloud firewall (GCP: tick *Allow HTTP/HTTPS traffic* on the VM, or add a firewall rule).
+2. Use the VM's **external** IP, which the cloud maps to the internal one:
+
+```bash
+echo "<VM external IP> spring.local vue.local" | sudo tee -a /etc/hosts
+curl http://spring.local/actuator/health
+```
+
+### Option D — NodePort
 
 Expose Traefik directly on the node's IP, on ports 30000–32767:
 
 ```bash
 helm upgrade --install traefik traefik/traefik -n traefik \
-  --set service.type=NodePort \
+  --set service.spec.type=NodePort \
   --set ports.web.nodePort=30080 \
   --set ports.websecure.nodePort=30443
 
@@ -218,7 +261,7 @@ curl --resolve spring.local:30080:127.0.0.1 http://spring.local:30080/actuator/h
 | kubectl | your own `kubectl` | `microk8s kubectl`, or export `microk8s config` |
 | Default StorageClass | `standard` (built in) | `microk8s-hostpath` — enable `hostpath-storage` |
 | DNS | built in | enable `dns` |
-| LoadBalancer IP | `minikube tunnel` | `metallb` addon |
+| LoadBalancer IP | `minikube tunnel` | `metallb` addon (on cloud VMs: the node IP as `externalIPs`) |
 | Web UI | `minikube dashboard` | Headlamp with Helm (see [section 3](#3-enable-the-addons)) |
 | Local images | `minikube image load <img>` | `docker save <img> \| microk8s ctr image import -` |
 | Multi-node | `minikube start --nodes 2` | `microk8s add-node` on one machine, `microk8s join ...` on the others |
