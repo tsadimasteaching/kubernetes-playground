@@ -1,0 +1,11 @@
+# Keep the build context small and avoid leaking local artifacts into the image.
+target/
+.idea/
+.vscode/
+*.iml
+.git/
+.gitignore
+Dockerfile*
+.dockerignore
+README.md
+*.http

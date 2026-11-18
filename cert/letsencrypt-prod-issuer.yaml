@@ -1,0 +1,17 @@
+# Let's Encrypt PRODUCTION ClusterIssuer: browser-trusted certificates (see cert/README.md).
+# Needs a cluster reachable from the internet, a DNS name pointing at Traefik and port 80 open
+# (HTTP-01 challenge). Strict rate limits: e.g. 5 certificates per exact set of names per week.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # Optional: add "email: you@your-domain" to get expiry warnings.
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: traefik

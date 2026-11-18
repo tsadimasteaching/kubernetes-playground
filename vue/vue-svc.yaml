@@ -8,7 +8,7 @@ spec:
   ports:
     - port: 9000
       protocol: TCP
-      targetPort: 80
+      targetPort: 8080   # nginx-unprivileged port in the frontend image
       name: vue
   selector:
     app: vue

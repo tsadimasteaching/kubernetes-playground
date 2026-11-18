@@ -1,3 +1,4 @@
+# Spring Boot backend of the Tickets app (source and Dockerfile in ../backend).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +18,8 @@ spec:
     spec:
       containers:
       - name:  spring
-        image:  ghcr.io/tsadimas/ds-lab-2024:0f3ade0-1
+        # Built from backend/Dockerfile.multistage
+        image:  ghcr.io/tsadimas/cp-spring:2026
         livenessProbe:
           httpGet:
             path: "/actuator/health/liveness"
@@ -40,12 +42,20 @@ spec:
             cpu: 1000m
             memory: 512Mi
         env:
-        - name: SPRING_DATASOURCE_URL
-          value: jdbc:postgresql://postgres:5432/dsdb
-        - name: SPRING_DATASOURCE_USERNAME
+        # Read by backend/src/main/resources/application.properties:
+        #   jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+        - name: DB_HOST
+          value: postgres          # the postgres Service (postgres/postgres-svc.yaml)
+        - name: DB_NAME
+          value: dsdb
+        - name: DB_USER
           value: dbuser
-        - name: SPRING_DATASOURCE_PASSWORD
+        - name: DB_PASSWORD
           value: pass123
+        # Heap = 60% of the 512Mi memory limit. The image default (75%) leaves too
+        # little room for the JVM's non-heap memory and risks an OOMKill.
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:MaxRAMPercentage=60.0"
         ports:
         - containerPort:  8080
           name:  spring

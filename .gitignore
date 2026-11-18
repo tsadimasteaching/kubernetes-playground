@@ -1,1 +1,19 @@
+# Registry credentials for the image pull secret (see README → Container registry)
 .dockerconfig.json
+
+
+# Maven
+target/
+
+# Node / Vite
+node_modules/
+dist/
+
+# IDEs
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# OS
+.DS_Store

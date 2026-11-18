@@ -1,0 +1,21 @@
+# nginx config for the production frontend image (Dockerfile.multistage).
+# ${BACKEND_URL} is replaced at container start by the nginx image's envsubst step.
+server {
+    listen       8080;            # unprivileged image: cannot bind to port 80
+    listen       [::]:8080;
+    server_name  _;
+    root         /usr/share/nginx/html;
+
+    # Forward API calls to the Spring Boot container -> same origin, no CORS needed.
+    location /api/ {
+        proxy_pass         ${BACKEND_URL};
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # Single-page app: unknown paths fall back to index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

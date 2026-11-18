@@ -1,0 +1,71 @@
+# Public HTTPS Ingress for the Vue frontend with a Let's Encrypt certificate.
+# Only for a cluster reachable from the internet, with a DNS name pointing at Traefik
+# (see cert/README.md → "Let's Encrypt on a real cluster"). Change the host to your own.
+#
+# Only the frontend is public. The browser reaches the API through the frontend's nginx
+# (/api/* → Service spring:8080), so Spring itself needs no public Ingress.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vue-ingress-letsencrypt
+  annotations:
+    # cert-manager requests the certificate from this ClusterIssuer (cert/letsencrypt-prod-issuer.yaml)
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # HTTPS (port 443). Plain HTTP is redirected by the second Ingress below.
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - tickets.tsadimas.dns-cloud.net
+      secretName: vue-letsencrypt-tls
+  rules:
+    - host: tickets.tsadimas.dns-cloud.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vue-svc
+                port:
+                  name: vue
+---
+# Traefik Middleware (a Traefik CRD, not a Kubernetes built-in): answers with a
+# permanent redirect (301) from http:// to https://.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+# HTTP Ingress for the same host: every request on port 80 goes through the middleware
+# above and is redirected to HTTPS. Only this host is affected, not vue.local.
+#
+# Let's Encrypt renewals still work: cert-manager's temporary challenge Ingress has a longer
+# path (/.well-known/acme-challenge/<token>), so Traefik routes it before this catch-all.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vue-ingress-letsencrypt-http
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    # <namespace>-<middleware name>@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: tickets.tsadimas.dns-cloud.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vue-svc
+                port:
+                  name: vue

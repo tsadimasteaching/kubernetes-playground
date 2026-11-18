@@ -1,3 +1,5 @@
+# Vue frontend of the Tickets app (source and Dockerfile in ../frontend).
+# nginx serves the static files and proxies /api/* to the Spring backend.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,16 +19,34 @@ spec:
     spec:
       containers:
       - name:  vue
-        image:  ghcr.io/tsadimas/ds-vue:latest
+        # Built from frontend/Dockerfile.multistage
+        image:  ghcr.io/tsadimas/cp-vue:2026
+        env:
+        # Where nginx forwards /api/* (frontend/nginx/default.conf.template).
+        # "spring" is the backend Service, so it must exist before this pod starts.
+        - name: BACKEND_URL
+          value: http://spring:8080
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 20
         resources:
           requests:
-            cpu: 200m
-            memory: 256Mi
+            cpu: 50m
+            memory: 32Mi
           limits:
-            cpu: 1000m
-            memory: 512Mi
+            cpu: 500m
+            memory: 128Mi
         ports:
-        - containerPort: 80
+        # nginx-unprivileged runs as non-root, so it listens on 8080, not 80
+        - containerPort: 8080
           name:  vue
       imagePullSecrets:
       - name: registry-credentials

@@ -1,18 +1,28 @@
 # Kubernetes Playground
 
-Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a **Spring Boot** backend and a **Vue** frontend — running on [minikube](https://minikube.sigs.k8s.io/) (or [MicroK8s](MICROK8S.md)), plus a [Kustomize](kustomization/README.md) base/overlay demo.
+Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a **Spring Boot** backend and a **Vue** frontend — running on [minikube](https://minikube.sigs.k8s.io/) (or [MicroK8s](MICROK8S.md)).
+
+The application is a small **ticketing system** (from the [docker-playground](https://github.com/tsadimasteaching/docker-playground/tree/docker) repository). Its source and Dockerfiles are in [backend/](backend/README.md) and [frontend/](frontend/README.md). Demo users, all with password `password`: `alice` and `bob` (role USER: create and edit their own tickets), `agent` (role AGENT: see, assign and resolve all tickets).
+
+```text
+browser ──► Traefik ──► vue-svc:9000 ──► vue pod (nginx :8080) ──/api──► spring:8080 ──► spring pod ──► postgres:5432 ──► postgres-0
+            vue.local (HTTP)
+            or a public name (HTTPS, Let's Encrypt)
+```
+
+Only the frontend has an Ingress. The backend is reached through the frontend's nginx (`/api/*`), never directly from outside the cluster.
 
 ## Repository structure
 
 ```text
 .
 ├── .devcontainer/      # Dev container / GitHub Codespaces setup
-├── cert/               # cert-manager ClusterIssuers — see cert/README.md
-├── nginx/              # Minimal Deployment + Service + PVC example — see nginx/README.md
+├── backend/            # Spring Boot source + Dockerfile — see backend/README.md
+├── frontend/           # Vue source + Dockerfile + nginx config — see frontend/README.md
+├── cert/               # cert-manager + Let's Encrypt ClusterIssuer — see cert/README.md
 ├── postgres/           # StatefulSet and Services for PostgreSQL — see postgres/README.md
-├── spring/             # Spring Boot Deployment, Service, Ingress (HTTP and HTTPS) — see spring/README.md
-├── vue/                # Vue frontend Deployment, Service, Ingress — see vue/README.md
-├── kustomization/      # Kustomize base/overlay demo — see its own README
+├── spring/             # Spring Boot Deployment and Service (no Ingress) — see spring/README.md
+├── vue/                # Vue frontend Deployment, Service, Ingresses (vue.local, public HTTPS) — see vue/README.md
 └── MICROK8S.md         # Alternative setup: running the playground on MicroK8s
 ```
 
@@ -22,9 +32,8 @@ Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a
 2. [Container registry (GitHub Packages)](#2-container-registry-github-packages)
 3. [Deploy the application](#3-deploy-the-application)
 4. [Access the application](#4-access-the-application)
-5. [HTTPS with cert-manager](#5-https-with-cert-manager)
-6. [Kustomize demo](#6-kustomize-demo)
-7. [Useful tools](#7-useful-tools)
+5. [Public HTTPS with Let's Encrypt](#5-public-https-with-lets-encrypt)
+6. [Useful tools](#6-useful-tools)
 
 ---
 
@@ -128,20 +137,45 @@ The Spring and Vue images are pulled from `ghcr.io`. If the images are private (
 
 Your packages are listed under the *Packages* tab of your GitHub profile.
 
-### Build and push an image
+### Images used by the manifests
 
-Run these from the **application's** repository (where the Dockerfile lives), not from this one:
+| Deployment | Image | Built from |
+| --- | --- | --- |
+| `spring-deployment` | `ghcr.io/tsadimas/cp-spring:2026` | [backend/Dockerfile.multistage](backend/Dockerfile.multistage) |
+| `vue-deployment` | `ghcr.io/tsadimas/cp-vue:2026` | [frontend/Dockerfile.multistage](frontend/Dockerfile.multistage) |
+
+> New GitHub packages are **private** by default. Either make them public (package → *Package settings* → *Change visibility*) or create the `registry-credentials` secret below.
+
+### Build and push an image yourself
+
+To use your own fork or registry account, build from the repository root and change the `image:` in the Deployments:
 
 ```bash
 # build and tag
-docker build -t ghcr.io/<GITHUB-USERNAME>/ds-spring:latest -f nonroot.Dockerfile .
+docker build -t ghcr.io/<GITHUB-USERNAME>/cp-spring:2026 -f backend/Dockerfile.multistage  backend
+docker build -t ghcr.io/<GITHUB-USERNAME>/cp-vue:2026    -f frontend/Dockerfile.multistage frontend
 
 # log in to the registry
 cat ~/github-image-repo.txt | docker login ghcr.io -u <GITHUB-USERNAME> --password-stdin
 
 # push
-docker push ghcr.io/<GITHUB-USERNAME>/ds-spring:latest
+docker push ghcr.io/<GITHUB-USERNAME>/cp-spring:2026
+docker push ghcr.io/<GITHUB-USERNAME>/cp-vue:2026
 ```
+
+### Without a registry (minikube)
+
+Build straight into minikube's image store and point the Deployments at the local tag. Use a tag other than `latest`, because for `latest` Kubernetes always tries to pull from the registry:
+
+```bash
+(cd backend  && minikube image build -t tickets-backend:dev  -f Dockerfile.multistage .)
+(cd frontend && minikube image build -t tickets-frontend:dev -f Dockerfile.multistage .)
+
+kubectl set image deployment/spring-deployment spring=tickets-backend:dev
+kubectl set image deployment/vue-deployment    vue=tickets-frontend:dev
+```
+
+On MicroK8s, see the *Local images* row in [MICROK8S.md](MICROK8S.md#6-differences-from-minikube).
 
 ### Create the image pull secret
 
@@ -187,17 +221,17 @@ kubectl create secret docker-registry registry-credentials --from-file=.dockerco
 
 ## 3. Deploy the application
 
-Apply the tiers in order — the database first, since Spring connects to it on startup:
+Apply the tiers in order: the database first, since Spring connects to it on startup, and the `spring` Service before Vue, since the frontend's nginx looks up that name when it starts:
 
 ```bash
 kubectl apply -f postgres/
 kubectl rollout status statefulset/postgres   # wait until postgres-0 is Ready
 
-kubectl apply -f spring/spring-deployment.yaml -f spring/spring-svc.yaml -f spring/spring-ingress.yaml
-kubectl apply -f vue/
+kubectl apply -f spring/
+kubectl apply -f vue/vue-deployment.yaml -f vue/vue-svc.yaml -f vue/vue-ingress.yaml
 ```
 
-> `spring/` contains two Ingresses for the same host: `spring-ingress.yaml` (HTTP) and `spring-ingress-ssl.yaml` (HTTPS, see [section 5](#5-https-with-cert-manager)). Apply only one of them.
+> `vue/vue-ingress-letsencrypt.yaml` is for a cluster with a public DNS name only, see [section 5](#5-public-https-with-lets-encrypt).
 
 Check that everything is up:
 
@@ -218,10 +252,9 @@ Each directory has its own README with prerequisites, testing and troubleshootin
 | Component | README | Highlights |
 | --- | --- | --- |
 | PostgreSQL | [postgres/README.md](postgres/README.md) | why it runs as a **StatefulSet**, connecting with `psql`, data persistence |
-| Spring backend | [spring/README.md](spring/README.md) | probes, how the HTTP/HTTPS **Ingresses** work and how to test them |
-| Vue frontend | [vue/README.md](vue/README.md) | Ingress for `vue.local`, testing with and without Traefik |
-| TLS | [cert/README.md](cert/README.md) | cert-manager step by step |
-| nginx (standalone) | [nginx/README.md](nginx/README.md) | Deployment + PVC example, no Ingress |
+| Spring backend | [spring/README.md](spring/README.md) | configuration, probes, checking the database connection, Swagger UI |
+| Vue frontend | [vue/README.md](vue/README.md) | nginx `/api` proxy, how the **Ingress** works, testing with and without Traefik |
+| TLS | [cert/README.md](cert/README.md) | cert-manager and Let's Encrypt step by step, HTTP → HTTPS redirect |
 
 ---
 
@@ -231,8 +264,10 @@ Traefik routes requests by **hostname**:
 
 | Host | Ingress | Service |
 | --- | --- | --- |
-| `spring.local` | `spring-ingress` (HTTP) or `spring-ingress-ssl` (HTTPS) | `spring` (port 8080) |
 | `vue.local` | `vue-ingress` (HTTP) | `vue-svc` (port 9000) |
+| public name, e.g. `tickets.tsadimas.dns-cloud.net` | `vue-ingress-letsencrypt` (HTTPS + redirect) | `vue-svc` (port 9000) |
+
+The API is under the same host (`/api/...`). Spring has no Ingress of its own.
 
 ### Option A — Port-forward to Traefik (works everywhere, including Codespaces)
 
@@ -243,13 +278,13 @@ kubectl port-forward -n traefik svc/traefik 8080:80 8443:443
 In a second terminal, point the hostnames at your machine and send requests through Traefik:
 
 ```bash
-echo "127.0.0.1 spring.local vue.local" | sudo tee -a /etc/hosts
+echo "127.0.0.1 vue.local" | sudo tee -a /etc/hosts
 
-curl http://spring.local:8080/actuator/health
 curl http://vue.local:8080/
+curl -u alice:password http://vue.local:8080/api/me     # frontend nginx → spring → postgres
 ```
 
-On a local machine you can also open <http://vue.local:8080> in the browser.
+On a local machine you can also open <http://vue.local:8080> in the browser and log in as `alice`, `bob` or `agent` (password `password`).
 
 > In Codespaces, the forwarded URL (`https://<name>-8080.app.github.dev`) sends a different `Host` header, so Traefik's host rules do not match. Test from the Codespace terminal with `curl` as above, or use Option C.
 
@@ -258,8 +293,8 @@ On a local machine you can also open <http://vue.local:8080> in the browser.
 ```bash
 minikube tunnel                       # keep it running in its own terminal
 kubectl get svc -n traefik traefik    # note the EXTERNAL-IP
-echo "<EXTERNAL-IP> spring.local vue.local" | sudo tee -a /etc/hosts
-curl http://spring.local/actuator/health
+echo "<EXTERNAL-IP> vue.local" | sudo tee -a /etc/hosts
+curl -u alice:password http://vue.local/api/me
 ```
 
 ### Option C — Without an Ingress
@@ -267,15 +302,15 @@ curl http://spring.local/actuator/health
 Port-forward directly to the Services, bypassing Traefik. Each command keeps running, so use a separate terminal for each, and stop the Traefik port-forward first because it also uses 8080:
 
 ```bash
-kubectl port-forward svc/spring 8080:8080      # terminal 1 → http://localhost:8080/actuator/health
+kubectl port-forward svc/spring 8080:8080      # terminal 1 → http://localhost:8080/swagger-ui.html
 kubectl port-forward svc/vue-svc 9000:9000     # terminal 2 → http://localhost:9000/
 ```
 
 ---
 
-## 5. HTTPS with cert-manager
+## 5. Public HTTPS with Let's Encrypt
 
-The step-by-step guide is in **[cert/README.md](cert/README.md)**: installing cert-manager with Helm, the ClusterIssuer, issuing a certificate through an Ingress, testing and troubleshooting. In short:
+On a cluster reachable from the internet (e.g. the MicroK8s cloud VM of [MICROK8S.md](MICROK8S.md)), the frontend gets a public name and a browser-trusted certificate. The step-by-step guide is in **[cert/README.md](cert/README.md)**: DNS and firewall requirements, installing cert-manager, the ClusterIssuer, the HTTP-01 challenge, the HTTP → HTTPS redirect and troubleshooting. In short:
 
 ```bash
 helm repo add jetstack https://charts.jetstack.io --force-update
@@ -283,32 +318,19 @@ helm install cert-manager jetstack/cert-manager \
   --namespace cert-manager --create-namespace \
   --version v1.21.3 --set crds.enabled=true
 
-kubectl apply -f cert/cluster-issuer.yaml                    # self-signed ClusterIssuer
+kubectl apply -f cert/letsencrypt-prod-issuer.yaml         # ClusterIssuer letsencrypt-prod
+kubectl apply -f vue/vue-ingress-letsencrypt.yaml          # set your host name in it first
+kubectl get certificate                                    # vue-letsencrypt-tls → READY True
 
-kubectl delete -f spring/spring-ingress.yaml --ignore-not-found
-kubectl apply -f spring/spring-ingress-ssl.yaml              # HTTPS Ingress for spring.local
-kubectl get certificate                                      # spring-tls-secret → READY True
-
-kubectl port-forward -n traefik svc/traefik 8443:443 &
-curl -k --resolve spring.local:8443:127.0.0.1 https://spring.local:8443/actuator/health
+curl -I https://tickets.tsadimas.dns-cloud.net/            # 200, no -k needed
+curl -I http://tickets.tsadimas.dns-cloud.net/             # 301 → https://
 ```
+
+> Not on minikube or Codespaces: Let's Encrypt must reach Traefik from the internet on port 80. Use `vue.local` there.
 
 ---
 
-## 6. Kustomize demo
-
-The [kustomization/](kustomization/) directory has a standalone base/overlay example (dev and production) with its own [README](kustomization/README.md).
-
-```bash
-kubectl kustomize kustomization/overlays/dev     # preview
-kubectl apply -k kustomization/overlays/dev      # apply
-```
-
-> The demo's Ingress uses the same Traefik controller (`ingressClassName: traefik`). The production overlay serves HTTPS only and gets its certificate from cert-manager ([cert/README.md](cert/README.md#optional--kustomize-production-overlay)). Test it through the Traefik port-forward, e.g. `curl --resolve dev.webapp.example.com:8080:127.0.0.1 http://dev.webapp.example.com:8080/`.
-
----
-
-## 7. Useful tools
+## 6. Useful tools
 
 Tools that make working with a cluster easier than plain `kubectl`. All of them read your kubeconfig (`~/.kube/config`), so they work with minikube out of the box. Tools marked with ✅ are already installed in the dev container.
 
@@ -348,4 +370,3 @@ Tools that make working with a cluster easier than plain `kubectl`. All of them 
 - [Pull an image from a private registry](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/)
 - [StatefulSets](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
 - [Spring Boot health probes](https://www.baeldung.com/spring-liveness-readiness-probes)
-- [Kustomize](https://kustomize.io/)

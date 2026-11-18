@@ -177,8 +177,8 @@ Identical to [README section 4, Option A](README.md#option-a--port-forward-to-tr
 
 ```bash
 kubectl port-forward -n traefik svc/traefik 8080:80 8443:443
-echo "127.0.0.1 spring.local vue.local" | sudo tee -a /etc/hosts
-curl http://spring.local:8080/actuator/health
+echo "127.0.0.1 vue.local" | sudo tee -a /etc/hosts
+curl -u alice:password http://vue.local:8080/api/me
 ```
 
 ### Option B — MetalLB (replaces `minikube tunnel`)
@@ -197,8 +197,8 @@ Pick a few addresses in that subnet that nothing else uses and that are outside 
 ```bash
 microk8s enable metallb:192.168.1.240-192.168.1.250
 kubectl get svc -n traefik traefik      # EXTERNAL-IP is now e.g. 192.168.1.240
-echo "192.168.1.240 spring.local vue.local" | sudo tee -a /etc/hosts
-curl http://spring.local/actuator/health
+echo "192.168.1.240 vue.local" | sudo tee -a /etc/hosts
+curl -u alice:password http://vue.local/api/me
 ```
 
 The addon also creates the `IPAddressPool` and `L2Advertisement` (layer 2 mode) in the `metallb-system` namespace, so nothing else is needed.
@@ -222,7 +222,7 @@ helm upgrade --install traefik traefik/traefik -n traefik \
   --wait
 
 kubectl get svc -n traefik traefik      # EXTERNAL-IP shows 10.166.0.2
-curl -H "Host: spring.local" http://10.166.0.2/actuator/health
+curl -H "Host: vue.local" -u alice:password http://10.166.0.2/api/me
 ```
 
 > Extra Service fields go under `service.spec` — the chart rejects `service.externalIPs` or `service.type`.
@@ -233,9 +233,11 @@ To reach it from your laptop:
 2. Use the VM's **external** IP, which the cloud maps to the internal one:
 
 ```bash
-echo "<VM external IP> spring.local vue.local" | sudo tee -a /etc/hosts
-curl http://spring.local/actuator/health
+echo "<VM external IP> vue.local" | sudo tee -a /etc/hosts
+curl -u alice:password http://vue.local/api/me
 ```
+
+With a DNS name pointing at the VM's external IP you can also serve the app publicly over HTTPS with a Let's Encrypt certificate: see [cert/README.md](cert/README.md).
 
 ### Option D — NodePort
 
@@ -247,7 +249,7 @@ helm upgrade --install traefik traefik/traefik -n traefik \
   --set ports.web.nodePort=30080 \
   --set ports.websecure.nodePort=30443
 
-curl --resolve spring.local:30080:127.0.0.1 http://spring.local:30080/actuator/health
+curl --resolve vue.local:30080:127.0.0.1 -u alice:password http://vue.local:30080/api/me
 ```
 
 ---

@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# Dockerfile.multistage — image used by vue/vue-deployment.yaml
+#
+#   * stage 1 builds static files with Node (npm ci, cached on package*.json)
+#   * stage 2 serves them with nginx — no Node, no node_modules, no sources
+#   * nginx-unprivileged runs as a non-root user (uid 101) on port 8080
+#   * /api is reverse-proxied to the backend (BACKEND_URL env var)
+#
+# Build:  docker build -f Dockerfile.multistage -t tickets-frontend:multistage .
+# Run:    docker run --rm -p 8081:8080 -e BACKEND_URL=http://<backend>:8080 tickets-frontend:multistage
+# ---------------------------------------------------------------------------
+
+# ===== Stage 1: build =======================================================
+FROM node:24-alpine AS build
+
+WORKDIR /build
+
+# 1) Dependencies first -> cached until package.json / package-lock.json change.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# 2) Sources, then the production build into /build/dist
+COPY . .
+RUN npm run build
+
+# ===== Stage 2: runtime =====================================================
+FROM nginxinc/nginx-unprivileged:alpine
+
+# Default backend address = the backend container's name on a user-defined network.
+ENV BACKEND_URL=http://tickets-backend:8080
+
+# Templates in /etc/nginx/templates are rendered (envsubst) into /etc/nginx/conf.d at startup.
+COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY --from=build /build/dist /usr/share/nginx/html
+
+# Already the default in this image, made explicit for teaching purposes.
+USER nginx
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1

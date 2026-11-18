@@ -61,8 +61,6 @@ Spring and Vue are **stateless**: any pod is as good as any other, so a `Deploym
 
 The stable names and per-pod storage are also what makes database replication possible (e.g. `postgres-0` as primary, `postgres-1` as replica). For production, an operator such as [CloudNativePG](https://cloudnative-pg.io/) builds on these primitives and adds backups, failover and upgrades.
 
-Compare with the [nginx/](../nginx/README.md) example, a Deployment with a hand-made PVC.
-
 ## Notes
 
 - `PGDATA` points to a subdirectory of the volume, because some storage backends create `lost+found` at the volume root, which makes `initdb` fail.
