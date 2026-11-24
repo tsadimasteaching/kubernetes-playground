@@ -7,9 +7,7 @@ The backend has **no Ingress**: it is not reachable from outside the cluster. Th
 - `spring-deployment.yaml` – the Deployment: image `ghcr.io/tsadimas/cp-spring:2026` (built from [backend/Dockerfile.multistage](../backend/Dockerfile.multistage)), database connection through environment variables (see below), liveness/readiness probes on Spring Boot Actuator, resource limits, `imagePullSecrets: registry-credentials`
 - `spring-svc.yaml` – ClusterIP Service `spring`, port 8080 (port name `spring`)
 
-```text
-browser ──► Traefik ──► vue pod (nginx) ──/api/*──► Service spring:8080 ──► Pod spring ──► Service postgres:5432 ──► postgres-0
-```
+![Browser → Traefik → vue pod (nginx) → Service spring → Pod spring → Service postgres → postgres-0 with its PVC](../docs/images/spring.png)
 
 ## Configuration
 
@@ -20,6 +18,8 @@ browser ──► Traefik ──► vue pod (nginx) ──/api/*──► Servic
 | `DB_HOST` | `postgres` | the PostgreSQL Service name |
 | `DB_PORT` | not set, default `5432` | |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `dsdb` / `dbuser` / `pass123` | must match `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` in [postgres-statefulset.yaml](../postgres/postgres-statefulset.yaml) |
+| `KEYCLOAK_ISSUER_URI` | `http://keycloak.localhost:8080/realms/tickets` | must equal the `iss` claim of the tokens = Keycloak's URL **as the browser sees it** |
+| `KEYCLOAK_JWK_SET_URI` | `http://keycloak:8080/realms/tickets/protocol/openid-connect/certs` | where Spring downloads Keycloak's public keys (the internal Service) |
 | `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=60.0` | heap = 60% of the 512Mi limit, leaving room for the JVM's non-heap memory |
 
 Result: `jdbc:postgresql://postgres:5432/dsdb`.
@@ -30,7 +30,7 @@ Result: `jdbc:postgresql://postgres:5432/dsdb`.
 | --- | --- |
 | `/actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness` | no login, used by the probes |
 | `/swagger-ui.html`, `/v3/api-docs` | no login, Swagger UI with an *Authorize* button |
-| `/api/**` | HTTP Basic. Demo users (password `password`): `alice`, `bob` (USER), `agent` (AGENT) |
+| `/api/**` | `Authorization: Bearer <token>`: a Keycloak access token ([Keycloak.md](../Keycloak.md#3-backend-an-oauth2-resource-server)). Demo users (password `password`): `alice`, `bob` (USER), `agent` (AGENT) |
 | anything else | denied by Spring Security: `401` without credentials, `403` with them |
 
 ## Prerequisites
@@ -71,21 +71,26 @@ kubectl exec postgres-0 -- psql -U dbuser -d dsdb -c 'select id, title, created_
 
 ## Testing
 
-Port-forward straight to the Service and leave it running. If the Traefik port-forward from the main README still uses port 8080, stop it first:
+Port-forward straight to the Service and leave it running. Port 8081 locally, because 8080 is used by the Traefik port-forward of the main README, which is needed to get a token from Keycloak:
 
 ```bash
-kubectl port-forward svc/spring 8080:8080
+kubectl port-forward svc/spring 8081:8080
 ```
 
 In a second terminal:
 
 ```bash
-curl http://localhost:8080/actuator/health          # {"status":"UP"}
-curl -u alice:password http://localhost:8080/api/me # {"username":"alice",...}
-curl -u agent:password http://localhost:8080/api/tickets
+curl http://localhost:8081/actuator/health          # {"status":"UP"}
+curl -si http://localhost:8081/api/me | head -3     # 401, WWW-Authenticate: Bearer
+
+# a token for alice from Keycloak (through Traefik, so that "iss" matches KEYCLOAK_ISSUER_URI)
+TOKEN=$(curl -s http://keycloak.localhost:8080/realms/tickets/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=tickets-cli -d username=alice -d password=password | jq -r .access_token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8081/api/me       # {"username":"alice","roles":["USER"]}
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8081/api/tickets
 ```
 
-Swagger UI: <http://localhost:8080/swagger-ui.html> (*Authorize* with a demo user).
+Swagger UI: <http://localhost:8081/swagger-ui.html> (*Authorize*, paste the token).
 
 If this fails, the problem is in the pod or the database. Check `kubectl logs deploy/spring-deployment`. If it works but the frontend's API calls fail, see [vue/README.md → Troubleshooting](../vue/README.md#troubleshooting).
 
@@ -96,6 +101,7 @@ If this fails, the problem is in the pod or the database. Check `kubectl logs de
 | Pod `ImagePullBackOff` | private image and missing or wrong `registry-credentials` secret. Check with `kubectl describe pod -l app=spring` |
 | Pod `Running` but `0/1`, restarts | readiness/liveness failing. Usually the DB is not reachable. Check `kubectl logs` and that `postgres-0` is Ready |
 | `kubectl get endpoints spring` is empty | the pod is not Ready yet, or the Service selector does not match the pod labels |
+| `401` on `/api/...` with a token | the `WWW-Authenticate` header says why: `iss claim is not valid` (token requested at another Keycloak URL than `KEYCLOAK_ISSUER_URI`), `Jwt expired`, `aud claim is not valid`. See [Keycloak.md → Troubleshooting](../Keycloak.md#8-troubleshooting) |
 | `401` on `/` | expected: only `/api/**`, `/actuator/health` and Swagger are allowed. Try `/actuator/health` or `/swagger-ui.html` |
 | Log says `password authentication failed for user "dbuser"` | `DB_USER` / `DB_PASSWORD` do not match the database. If you changed them in the StatefulSet after the first start, the old values are still in the volume (see [postgres/README.md](../postgres/README.md)) |
 | Pod `OOMKilled` | the memory limit is too small for the heap. Raise `limits.memory` or lower `MaxRAMPercentage` |

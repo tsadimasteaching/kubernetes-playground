@@ -1,0 +1,57 @@
+# Public HTTPS Ingress for Keycloak with a Let's Encrypt certificate.
+# Only for a cluster reachable from the internet (see cert/README.md), with a DNS record for the
+# host below pointing at Traefik. Change the host to your own (in spec.tls and in both rules).
+#
+# The HTTP → HTTPS redirect reuses the Traefik Middleware "redirect-https" defined in
+# vue/vue-ingress-letsencrypt.yaml, so apply that file first.
+#
+# Then point the app at this URL:
+#   - backend  (spring/spring-deployment.yaml): KEYCLOAK_ISSUER_URI=https://<host>/realms/tickets
+#   - frontend (vue/vue-deployment.yaml):       KEYCLOAK_URL=https://<host>
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-ingress-letsencrypt
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - keycloak.tsadimas.dns-cloud.net
+      secretName: keycloak-letsencrypt-tls
+  rules:
+    - host: keycloak.tsadimas.dns-cloud.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http
+---
+# Plain HTTP on the same host: redirect to HTTPS (Middleware from vue/vue-ingress-letsencrypt.yaml).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-ingress-letsencrypt-http
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.middlewares: default-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: keycloak.tsadimas.dns-cloud.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http

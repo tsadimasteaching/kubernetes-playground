@@ -1,0 +1,109 @@
+# Keycloak, the identity provider of the Tickets app (OpenID Connect / OAuth 2.0).
+# The browser logs in here; the backend checks the tokens Keycloak signs. See keycloak/README.md.
+#
+# Before applying, create the realm ConfigMap from keycloak/realm/tickets-realm.json:
+#   kubectl create configmap keycloak-realm --from-file=keycloak/realm/tickets-realm.json
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: keycloak
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.8.2
+          # "start" = production mode (start-dev would use an in-memory H2 database and relaxed settings).
+          # --import-realm imports every *.json in /opt/keycloak/data/import on startup.
+          # A realm that already exists in the database is NOT overwritten (strategy IGNORE_EXISTING).
+          args: ["start", "--import-realm"]
+          env:
+            # ---- database ----------------------------------------------------
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: jdbc:postgresql://keycloak-postgres:5432/keycloak
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: db-username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: db-password
+            # ---- first admin user (master realm), created on the first start only
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: admin-username
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: admin-password
+            # ---- HTTP, hostname, reverse proxy -------------------------------
+            # TLS is terminated by Traefik (Ingress), Keycloak itself speaks plain HTTP.
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            # No fixed hostname: Keycloak builds its URLs (and the "iss" claim of the tokens) from the
+            # URL each request was sent to. So the same Deployment works for keycloak.localhost:8080
+            # and for a public https:// name. For a real installation set KC_HOSTNAME instead.
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            # Trust the X-Forwarded-* headers set by Traefik (original host, port and https scheme).
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            # ---- health checks on the management port 9000 -------------------
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          # The first start takes 1-2 minutes (build step + database schema). The startupProbe gives it
+          # up to 5 minutes; liveness/readiness only start after it succeeds.
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: management
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1500m
+              memory: 1Gi
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm

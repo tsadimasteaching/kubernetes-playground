@@ -2,15 +2,11 @@
 
 Hands-on Kubernetes manifests for a three-tier application — **PostgreSQL**, a **Spring Boot** backend and a **Vue** frontend — running on [minikube](https://minikube.sigs.k8s.io/) (or [MicroK8s](MICROK8S.md)).
 
-The application is a small **ticketing system** (from the [docker-playground](https://github.com/tsadimasteaching/docker-playground/tree/docker) repository). Its source and Dockerfiles are in [backend/](backend/README.md) and [frontend/](frontend/README.md). Demo users, all with password `password`: `alice` and `bob` (role USER: create and edit their own tickets), `agent` (role AGENT: see, assign and resolve all tickets).
+The application is a small **ticketing system** (from the [docker-playground](https://github.com/tsadimasteaching/docker-playground/tree/docker) repository). Its source and Dockerfiles are in [backend/](backend/README.md) and [frontend/](frontend/README.md). Users log in through **[Keycloak](Keycloak.md)**. Demo users, all with password `password`: `alice` and `bob` (role USER: create and edit their own tickets), `agent` (role AGENT: see, assign and resolve all tickets).
 
-```text
-browser ──► Traefik ──► vue-svc:9000 ──► vue pod (nginx :8080) ──/api──► spring:8080 ──► spring pod ──► postgres:5432 ──► postgres-0
-            vue.local (HTTP)
-            or a public name (HTTPS, Let's Encrypt)
-```
+![Browser → Traefik → Vue (nginx) → Spring → PostgreSQL, and Traefik → Keycloak → its PostgreSQL; Spring fetches Keycloak's public keys](docs/images/architecture.png)
 
-Only the frontend has an Ingress. The backend is reached through the frontend's nginx (`/api/*`), never directly from outside the cluster.
+The frontend and Keycloak have an Ingress. The backend is reached through the frontend's nginx (`/api/*`), never directly from outside the cluster. How the login works is explained in **[Keycloak.md](Keycloak.md)**.
 
 ## Repository structure
 
@@ -20,11 +16,17 @@ Only the frontend has an Ingress. The backend is reached through the frontend's 
 ├── backend/            # Spring Boot source + Dockerfile — see backend/README.md
 ├── frontend/           # Vue source + Dockerfile + nginx config — see frontend/README.md
 ├── cert/               # cert-manager + Let's Encrypt ClusterIssuer — see cert/README.md
+├── docs/               # Architecture diagrams (generated with icons from docs/diagrams/) — see docs/diagrams/README.md
+├── keycloak/           # Keycloak (login), its PostgreSQL and the realm "tickets" — see keycloak/README.md
 ├── postgres/           # StatefulSet and Services for PostgreSQL — see postgres/README.md
 ├── spring/             # Spring Boot Deployment and Service (no Ingress) — see spring/README.md
-├── vue/                # Vue frontend Deployment, Service, Ingresses (vue.local, public HTTPS) — see vue/README.md
+├── vue/                # Vue frontend Deployment, Service, Ingresses (vue.local[host], public HTTPS) — see vue/README.md
+├── compose.yaml        # The whole app with Docker Compose (no Kubernetes) — see Keycloak.md section 6
+├── Keycloak.md         # How login with Keycloak works, and how backend and frontend use it
 └── MICROK8S.md         # Alternative setup: running the playground on MicroK8s
 ```
+
+> **Without Kubernetes:** `docker compose up --build -d` starts the whole app (PostgreSQL, Spring, Vue, Keycloak) from [compose.yaml](compose.yaml). Open <http://localhost:8081>. See [Keycloak.md → Docker Compose](Keycloak.md#everything-with-docker-compose).
 
 ## Contents
 
@@ -233,6 +235,15 @@ kubectl apply -f spring/
 kubectl apply -f vue/vue-deployment.yaml -f vue/vue-svc.yaml -f vue/vue-ingress.yaml
 ```
 
+Then Keycloak, which handles the login ([Keycloak.md → Deploy](Keycloak.md#2-deploy)):
+
+```bash
+kubectl apply -f keycloak/keycloak-secret.yaml -f keycloak/keycloak-postgres.yaml
+kubectl create configmap keycloak-realm --from-file=keycloak/realm/tickets-realm.json
+kubectl apply -f keycloak/keycloak-deployment.yaml -f keycloak/keycloak-svc.yaml -f keycloak/keycloak-ingress.yaml
+kubectl rollout status deployment/keycloak --timeout=5m     # first start: 1-2 minutes
+```
+
 > `vue/vue-ingress-letsencrypt.yaml` is for a cluster with a public DNS name only, see [section 5](#5-public-https-with-lets-encrypt).
 
 Check that everything is up:
@@ -254,6 +265,7 @@ Each directory has its own README with prerequisites, testing and troubleshootin
 | Component | README | Highlights |
 | --- | --- | --- |
 | PostgreSQL | [postgres/README.md](postgres/README.md) | why it runs as a **StatefulSet**, connecting with `psql`, data persistence |
+| Keycloak | [keycloak/README.md](keycloak/README.md) | production mode, the realm `tickets` (clients, roles, users), admin console |
 | Spring backend | [spring/README.md](spring/README.md) | configuration, probes, checking the database connection, Swagger UI |
 | Vue frontend | [vue/README.md](vue/README.md) | nginx `/api` proxy, how the **Ingress** works, testing with and without Traefik |
 | TLS | [cert/README.md](cert/README.md) | cert-manager and Let's Encrypt step by step, HTTP → HTTPS redirect |
@@ -266,7 +278,8 @@ Traefik routes requests by **hostname**:
 
 | Host | Ingress | Service |
 | --- | --- | --- |
-| `vue.local` | `vue-ingress` (HTTP) | `vue-svc` (port 9000) |
+| `vue.localhost` (use this in the browser) or `vue.local` | `vue-ingress` (HTTP) | `vue-svc` (port 9000) |
+| `keycloak.localhost` | `keycloak-ingress` (HTTP) | `keycloak` (port 8080) |
 | public name, e.g. `tickets.tsadimas.dns-cloud.net` | `vue-ingress-letsencrypt` (HTTPS + redirect) | `vue-svc` (port 9000) |
 
 The API is under the same host (`/api/...`). Spring has no Ingress of its own.
@@ -277,16 +290,18 @@ The API is under the same host (`/api/...`). Spring has no Ingress of its own.
 kubectl port-forward -n traefik svc/traefik 8080:80 8443:443
 ```
 
-In a second terminal, point the hostnames at your machine and send requests through Traefik:
+In a second terminal, send requests through Traefik. `curl` and browsers resolve `*.localhost` names to 127.0.0.1 by themselves, so no `/etc/hosts` entry is needed:
 
 ```bash
-echo "127.0.0.1 vue.local" | sudo tee -a /etc/hosts
+curl http://vue.localhost:8080/
 
-curl http://vue.local:8080/
-curl -u alice:password http://vue.local:8080/api/me     # frontend nginx → spring → postgres
+# get a token from Keycloak, then call the API: frontend nginx → spring → postgres
+TOKEN=$(curl -s http://keycloak.localhost:8080/realms/tickets/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=tickets-cli -d username=alice -d password=password | jq -r .access_token)
+curl -H "Authorization: Bearer $TOKEN" http://vue.localhost:8080/api/me
 ```
 
-On a local machine you can also open <http://vue.local:8080> in the browser and log in as `alice`, `bob` or `agent` (password `password`).
+On a local machine open <http://vue.localhost:8080> in the browser, click *Log in with Keycloak* and log in as `alice`, `bob` or `agent` (password `password`). Use `vue.localhost`, not `vue.local`: the login needs a [secure context](Keycloak.md#why-localhost-host-names).
 
 > In Codespaces, the forwarded URL (`https://<name>-8080.app.github.dev`) sends a different `Host` header, so Traefik's host rules do not match. Test from the Codespace terminal with `curl` as above, or use Option C.
 
@@ -296,8 +311,10 @@ On a local machine you can also open <http://vue.local:8080> in the browser and 
 minikube tunnel                       # keep it running in its own terminal
 kubectl get svc -n traefik traefik    # note the EXTERNAL-IP
 echo "<EXTERNAL-IP> vue.local" | sudo tee -a /etc/hosts
-curl -u alice:password http://vue.local/api/me
+curl -si http://vue.local/api/me | head -1     # 401 + WWW-Authenticate: Bearer = Spring answered
 ```
+
+> The Keycloak setup expects the browser at `vue.localhost:8080` / `keycloak.localhost:8080` (Option A). With another host or port, change `KEYCLOAK_URL`, `KEYCLOAK_ISSUER_URI` and the redirect URIs as described in [Keycloak.md](Keycloak.md#two-names-for-one-keycloak-issuer-vs-internal-url).
 
 ### Option C — Without an Ingress
 
@@ -372,3 +389,4 @@ Tools that make working with a cluster easier than plain `kubectl`. All of them 
 - [Pull an image from a private registry](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/)
 - [StatefulSets](https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/)
 - [Spring Boot health probes](https://www.baeldung.com/spring-liveness-readiness-probes)
+- [Keycloak: running in a container](https://www.keycloak.org/server/containers)

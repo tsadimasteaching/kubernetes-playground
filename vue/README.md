@@ -2,17 +2,12 @@
 
 The Vue single-page frontend of the Tickets app, and the **only part reachable from outside the cluster**. The image (built from [frontend/Dockerfile.multistage](../frontend/Dockerfile.multistage)) runs **nginx as a non-root user on port 8080**. nginx serves the static files and forwards every `/api/*` request to the Spring backend, so the browser talks to one origin only and no CORS is needed.
 
-- `vue-deployment.yaml` – the Deployment: image `ghcr.io/tsadimas/cp-vue:2026`, `BACKEND_URL=http://spring:8080`, readiness/liveness probes on `/`, resource limits, `imagePullSecrets: registry-credentials`
+- `vue-deployment.yaml` – the Deployment: image `ghcr.io/tsadimas/cp-vue:2026`, `BACKEND_URL=http://spring:8080`, `KEYCLOAK_URL=http://keycloak.localhost:8080` (served to the browser as `/config.json`, see [Keycloak.md](../Keycloak.md#where-is-keycloak-configjson)), readiness/liveness probes on `/`, resource limits, `imagePullSecrets: registry-credentials`
 - `vue-svc.yaml` – ClusterIP Service `vue-svc`, port **9000** → container port **8080** (port name `vue`)
-- `vue-ingress.yaml` – **HTTP** Ingress for `vue.local` (Traefik entrypoint `web`, port 80). For minikube, Codespaces or any cluster without a public DNS name
+- `vue-ingress.yaml` – **HTTP** Ingress for `vue.local` and `vue.localhost` (Traefik entrypoint `web`, port 80). Use `vue.localhost` in the browser: the Keycloak login needs a secure context, see [Keycloak.md](../Keycloak.md#why-localhost-host-names). For minikube, Codespaces or any cluster without a public DNS name
 - `vue-ingress-letsencrypt.yaml` – **public HTTPS** for a real DNS name, with a Let's Encrypt certificate and an `http://` → `https://` redirect. Only on a cluster reachable from the internet, see [cert/README.md](../cert/README.md)
 
-```text
-browser ──► Traefik (Ingress controller) ──► Service vue-svc:9000 ──► Pod vue:8080 (nginx)
-             Host: vue.local                                                 │ /api/*
-             or the public name                                              ▼
-                                                                 Service spring:8080 ──► Pod spring
-```
+![Browser → Traefik, which reads the Ingress rules and routes by Host to vue-svc → Pod vue (nginx); /api/* is proxied to Service spring → Pod spring](../docs/images/vue.png)
 
 `BACKEND_URL` is substituted into [frontend/nginx/default.conf.template](../frontend/nginx/default.conf.template) when the container starts (`proxy_pass ${BACKEND_URL};`). Check the result with:
 
@@ -90,10 +85,11 @@ In a second terminal:
 
 ```bash
 curl http://localhost:9000/                              # the index.html of the app
-curl -u alice:password http://localhost:9000/api/me      # through the nginx proxy to Spring
+curl -si http://localhost:9000/api/me | head -1          # 401 from Spring: through the nginx proxy, a token is needed
+curl http://localhost:9000/config.json                   # where the browser finds Keycloak
 ```
 
-Open <http://localhost:9000> in the browser and log in with one of the demo users (password `password`): `alice` or `bob` (role USER), `agent` (role AGENT).
+Open <http://localhost:9000> in the browser. Logging in needs Keycloak, and a redirect URI registered for this address; the full setup is in [Keycloak.md](../Keycloak.md#5-try-it).
 
 ### 2. Through Traefik
 
@@ -108,7 +104,7 @@ In a second terminal, choose one of these ways to send the right `Host`:
 ```bash
 # a) let curl resolve vue.local to 127.0.0.1 (no /etc/hosts change)
 curl --resolve vue.local:8080:127.0.0.1 http://vue.local:8080/
-curl --resolve vue.local:8080:127.0.0.1 -u alice:password http://vue.local:8080/api/me
+curl --resolve vue.local:8080:127.0.0.1 -si http://vue.local:8080/api/me | head -1   # 401 from Spring
 
 # b) set the Host header explicitly
 curl -H "Host: vue.local" http://localhost:8080/
@@ -117,7 +113,7 @@ curl -H "Host: vue.local" http://localhost:8080/
 curl -i -H "Host: wrong.local" http://localhost:8080/
 ```
 
-On a local machine, add `127.0.0.1 vue.local` to `/etc/hosts` and open <http://vue.local:8080> in the browser.
+In the browser open <http://vue.localhost:8080> (browsers resolve `*.localhost` to 127.0.0.1 themselves). `http://vue.local:8080` also loads the app, but the Keycloak login fails there because it is not a secure context ([Keycloak.md](../Keycloak.md#why-localhost-host-names)).
 
 > **Codespaces:** the forwarded URL sends its own `Host` header, so it does not match `vue.local`. Test with `curl` from the Codespace terminal, or open the forwarded port of step 1 (`vue-svc`) in the browser.
 
@@ -125,7 +121,7 @@ On a local machine, add `127.0.0.1 vue.local` to `/etc/hosts` and open <http://v
 
 ```bash
 curl -I https://tickets.tsadimas.dns-cloud.net/                       # 200, trusted certificate
-curl -u alice:password https://tickets.tsadimas.dns-cloud.net/api/me
+curl -si https://tickets.tsadimas.dns-cloud.net/api/me | head -1     # 401 from Spring
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://tickets.tsadimas.dns-cloud.net/   # 301 https://...
 ```
 

@@ -52,6 +52,14 @@ spec:
           value: dbuser
         - name: DB_PASSWORD
           value: pass123
+        # ---- Keycloak (backend/src/main/resources/application.properties) ----
+        # Must be EXACTLY the "iss" claim of the tokens = the Keycloak URL the BROWSER uses
+        # (keycloak/keycloak-ingress.yaml, reached through the Traefik port-forward on 8080).
+        - name: KEYCLOAK_ISSUER_URI
+          value: http://keycloak.localhost:8080/realms/tickets
+        # Where Spring downloads the signing keys: the internal Service, not the browser URL.
+        - name: KEYCLOAK_JWK_SET_URI
+          value: http://keycloak:8080/realms/tickets/protocol/openid-connect/certs
         # Heap = 60% of the 512Mi memory limit. The image default (75%) leaves too
         # little room for the JVM's non-heap memory and risks an OOMKill.
         - name: JAVA_TOOL_OPTIONS

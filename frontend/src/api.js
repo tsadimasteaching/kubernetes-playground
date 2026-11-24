@@ -1,31 +1,21 @@
-// Tiny wrapper around fetch() for the Spring Boot API (HTTP Basic auth).
+// Tiny wrapper around fetch() for the Spring Boot API (Bearer token from Keycloak).
 // All URLs are relative (/api/...): Vite (dev) or nginx (Docker) forwards them to the backend.
 
-const KEY = 'tickets-auth'
-let auth = sessionStorage.getItem(KEY)
+// Returns the current access token. Set by App.vue to auth.getToken; kept separate from auth.js
+// so this module does not depend on Keycloak and is easy to test.
+let tokenProvider = async () => null
 
-export function setCredentials(username, password) {
-  auth = 'Basic ' + btoa(`${username}:${password}`)
-  sessionStorage.setItem(KEY, auth)
-}
-
-export function clearCredentials() {
-  auth = null
-  sessionStorage.removeItem(KEY)
-}
-
-export function hasCredentials() {
-  return auth !== null
+export function setTokenProvider(provider) {
+  tokenProvider = provider
 }
 
 async function request(method, path, body) {
+  const token = await tokenProvider()
   const res = await fetch(path, {
     method,
     headers: {
-      ...(auth ? { Authorization: auth } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(body ? { 'Content-Type': 'application/json' } : {}),
-      // Tells Spring Security not to send "WWW-Authenticate", which would pop up the browser login dialog.
-      'X-Requested-With': 'XMLHttpRequest',
     },
     body: body ? JSON.stringify(body) : undefined,
   })

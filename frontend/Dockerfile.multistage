@@ -5,6 +5,7 @@
 #   * stage 2 serves them with nginx — no Node, no node_modules, no sources
 #   * nginx-unprivileged runs as a non-root user (uid 101) on port 8080
 #   * /api is reverse-proxied to the backend (BACKEND_URL env var)
+#   * /config.json tells the browser where Keycloak is (KEYCLOAK_* env vars)
 #
 # Build:  docker build -f Dockerfile.multistage -t tickets-frontend:multistage .
 # Run:    docker run --rm -p 8081:8080 -e BACKEND_URL=http://<backend>:8080 tickets-frontend:multistage
@@ -28,6 +29,12 @@ FROM nginxinc/nginx-unprivileged:alpine
 
 # Default backend address = the backend container's name on a user-defined network.
 ENV BACKEND_URL=http://tickets-backend:8080
+
+# Keycloak as seen by the BROWSER (served as /config.json, read by src/auth.js).
+# Default = the Kubernetes setup of this repository (see Keycloak.md).
+ENV KEYCLOAK_URL=http://keycloak.localhost:8080 \
+    KEYCLOAK_REALM=tickets \
+    KEYCLOAK_CLIENT_ID=tickets-frontend
 
 # Templates in /etc/nginx/templates are rendered (envsubst) into /etc/nginx/conf.d at startup.
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template

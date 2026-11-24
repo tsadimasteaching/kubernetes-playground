@@ -1,5 +1,6 @@
 # nginx config for the production frontend image (Dockerfile.multistage).
-# ${BACKEND_URL} is replaced at container start by the nginx image's envsubst step.
+# ${BACKEND_URL}, ${KEYCLOAK_URL}, ${KEYCLOAK_REALM} and ${KEYCLOAK_CLIENT_ID} are replaced at
+# container start by the nginx image's envsubst step.
 server {
     listen       8080;            # unprivileged image: cannot bind to port 80
     listen       [::]:8080;
@@ -12,6 +13,15 @@ server {
         proxy_set_header   Host $host;
         proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+
+    # Runtime configuration for the browser (src/auth.js): where Keycloak is.
+    # Rendered from environment variables when the container starts, so the same image
+    # works with any Keycloak URL without a rebuild.
+    location = /config.json {
+        default_type application/json;
+        add_header   Cache-Control "no-store";
+        return 200 '{"keycloakUrl":"${KEYCLOAK_URL}","realm":"${KEYCLOAK_REALM}","clientId":"${KEYCLOAK_CLIENT_ID}"}';
     }
 
     # Single-page app: unknown paths fall back to index.html.

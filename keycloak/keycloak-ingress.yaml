@@ -1,0 +1,27 @@
+# HTTP Ingress for Keycloak on keycloak.localhost, served by Traefik.
+#
+# Why *.localhost and not keycloak.local: the login libraries (keycloak-js, and Keycloak's own admin
+# console) need the browser's Web Crypto API, which is available only in a "secure context": https://,
+# or http://localhost / http://*.localhost. Browsers resolve *.localhost to 127.0.0.1 by themselves,
+# which is exactly where `kubectl port-forward -n traefik svc/traefik 8080:80` listens.
+#
+# For a public cluster use keycloak-ingress-letsencrypt.yaml (HTTPS) instead.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: keycloak.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  name: http

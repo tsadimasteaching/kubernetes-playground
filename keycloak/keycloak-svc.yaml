@@ -1,0 +1,19 @@
+# ClusterIP Service for Keycloak.
+#   - Traefik (keycloak-ingress.yaml) forwards the browser's requests here.
+#   - The Spring backend downloads Keycloak's public keys from here:
+#     http://keycloak:8080/realms/tickets/protocol/openid-connect/certs
+# The management port 9000 (health) is used only by the kubelet probes, so it is not exposed.
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+spec:
+  type: ClusterIP
+  selector:
+    app: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

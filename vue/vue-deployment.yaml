@@ -26,6 +26,13 @@ spec:
         # "spring" is the backend Service, so it must exist before this pod starts.
         - name: BACKEND_URL
           value: http://spring:8080
+        # Keycloak as seen by the BROWSER, served to it as /config.json (see Keycloak.md).
+        - name: KEYCLOAK_URL
+          value: http://keycloak.localhost:8080
+        - name: KEYCLOAK_REALM
+          value: tickets
+        - name: KEYCLOAK_CLIENT_ID
+          value: tickets-frontend
         readinessProbe:
           httpGet:
             path: /

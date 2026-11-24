@@ -5,16 +5,17 @@ A single-page app for the [Tickets API](../backend/README.md).
 - **USER** (`alice`, `bob`): create tickets, and edit or delete their own `OPEN` tickets.
 - **AGENT** (`agent`): see all tickets, **Assign to me**, and **Resolve** them with a resolution text.
 
-The password for every user is `password`.
+The password for every user is `password`. Users log in on **Keycloak's** login page; see [Keycloak.md](../Keycloak.md#4-frontend-keycloak-js) for how the app uses Keycloak.
 
 ```
 src/
 ├── main.js
 ├── App.vue                    header, login / logout
-├── api.js                     fetch() wrapper, HTTP Basic auth
+├── auth.js                    Keycloak login (keycloak-js): init, login, logout, token refresh
+├── api.js                     fetch() wrapper, sends the access token (Bearer)
 ├── style.css
 ├── components/
-│   ├── LoginForm.vue
+│   ├── LoginForm.vue          "Log in with Keycloak" button
 │   └── TicketBoard.vue        list + form, buttons depend on the role
 └── __tests__/                 Vitest tests
 nginx/default.conf.template    nginx config used by the Docker image
@@ -29,7 +30,7 @@ Because the browser only talks to one origin, no CORS configuration is needed.
 
 ## Run locally
 
-Requirements: Node.js 22+ (24 recommended) on your machine (not included in this repository's dev container, which is set up for Kubernetes; to just build the image you only need Docker) and the backend running on `http://localhost:8080` (see the [backend README](../backend/README.md)).
+Requirements: Node.js 22+ (24 recommended) on your machine (not included in this repository's dev container, which is set up for Kubernetes; to just build the image you only need Docker), the backend running on `http://localhost:8080` (see the [backend README](../backend/README.md)) and Keycloak on `http://localhost:8180` ([Keycloak.md → Local development](../Keycloak.md#6-local-development-without-kubernetes)).
 
 ```bash
 npm install
@@ -51,7 +52,10 @@ npm run preview
 
 ## Configuration
 
-The frontend has a single setting: **`BACKEND_URL`**, the address of the Spring Boot API. The browser never sees it.
+The frontend has two kinds of settings, both read when the server starts, never at build time:
+
+- **`BACKEND_URL`**: the address of the Spring Boot API. Only the server (nginx or Vite) uses it; the browser never sees it.
+- **`KEYCLOAK_URL`**, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`: where the **browser** finds Keycloak. The server hands them to the browser as `/config.json`, see [Keycloak.md](../Keycloak.md#where-is-keycloak-configjson).
 
 ### Why the browser code has no backend URL
 
@@ -91,7 +95,7 @@ npm run test:watch   # re-run on file changes
 
 | Test file                                                       | What it checks                                              |
 |-----------------------------------------------------------------|-------------------------------------------------------------|
-| [api.test.js](src/__tests__/api.test.js)                         | Basic auth header, JSON body, error handling (mocked `fetch`) |
+| [api.test.js](src/__tests__/api.test.js)                         | Bearer token header (fresh token per call), JSON body, error handling (mocked `fetch`) |
 | [TicketBoard.test.js](src/__tests__/TicketBoard.test.js)         | USER sees the form and edit buttons; AGENT can assign; creating a ticket |
 
 ## Docker

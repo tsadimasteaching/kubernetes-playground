@@ -4,15 +4,7 @@
 
 Here the signer is [Let's Encrypt](https://letsencrypt.org/), so the certificate is trusted by every browser. Only the **frontend** is public: the browser reaches the API through the frontend's nginx (`/api/*` → `spring:8080`), so Spring, Swagger UI and the actuator endpoints stay inside the cluster.
 
-```text
-Ingress vue-ingress-letsencrypt (annotation + spec.tls)
-        │  cert-manager notices the annotation
-        ▼
-Certificate ──► CertificateRequest ──► Order ──► Challenge (HTTP-01) ──► ClusterIssuer letsencrypt-prod
-        │
-        ▼
-Secret vue-letsencrypt-tls (tls.crt, tls.key) ──► used by Traefik for https://tickets.tsadimas.dns-cloud.net
-```
+![Ingress annotation → cert-manager → Certificate → CertificateRequest → Order → HTTP-01 Challenge with Let's Encrypt; the certificate is stored in a Secret that Traefik uses for HTTPS](../docs/images/cert-manager.png)
 
 ## Files
 
@@ -117,11 +109,11 @@ kubectl get secret vue-letsencrypt-tls -o jsonpath='{.data.tls\.crt}' | base64 -
   | openssl x509 -noout -subject -issuer -dates        # issuer: Let's Encrypt
 
 curl -I https://tickets.tsadimas.dns-cloud.net/                       # 200, no -k needed
-curl -u alice:password https://tickets.tsadimas.dns-cloud.net/api/me  # through nginx to Spring
+curl -si https://tickets.tsadimas.dns-cloud.net/api/me | head -1       # 401 from Spring: through nginx, a token is needed
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://tickets.tsadimas.dns-cloud.net/   # 301 https://...
 ```
 
-Open the site in the browser and log in as `alice` / `password`.
+Open the site in the browser and log in as `alice` / `password`. Login goes through Keycloak, which needs its own public name and certificate: see [Keycloak.md → Public HTTPS](../Keycloak.md#7-public-https).
 
 ### HTTP → HTTPS redirect
 

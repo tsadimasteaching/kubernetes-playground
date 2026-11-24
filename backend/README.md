@@ -14,7 +14,7 @@ src/main/java/gr/hua/dit/tickets
 
 ## Roles and users
 
-Users are kept in memory ([SecurityConfig.java](src/main/java/gr/hua/dit/tickets/config/SecurityConfig.java)) and log in with **HTTP Basic**. The password for every user is `password`.
+Users, passwords and roles are managed by **Keycloak** (realm `tickets`, [keycloak/realm/tickets-realm.json](../keycloak/realm/tickets-realm.json)). The API is an **OAuth2 resource server**: every `/api` request carries a Keycloak access token (`Authorization: Bearer ...`), and [SecurityConfig.java](src/main/java/gr/hua/dit/tickets/config/SecurityConfig.java) takes the user name from its `preferred_username` claim and the role from its `roles` claim. The password for every demo user is `password`. Details: [Keycloak.md](../Keycloak.md#3-backend-an-oauth2-resource-server).
 
 | User            | Role  | Permissions                                                                  |
 |-----------------|-------|------------------------------------------------------------------------------|
@@ -37,19 +37,22 @@ On first start, when the database is empty, [DataSeeder](src/main/java/gr/hua/di
 | POST   | `/api/tickets/{id}/resolve`  | AGENT       | `{resolution}` → `RESOLVED`                   |
 | GET    | `/actuator/health`           | public      | health check (used by Docker `HEALTHCHECK`)   |
 
-**Swagger UI:** <http://localhost:8080/swagger-ui.html>. Click **Authorize** and enter a user. The OpenAPI JSON is at `/v3/api-docs`.
+**Swagger UI:** <http://localhost:8080/swagger-ui.html>. Click **Authorize** and paste an access token. The OpenAPI JSON is at `/v3/api-docs`.
 
-Example with curl:
+Example with curl, with Keycloak running locally on port 8180 ([Keycloak.md → Local development](../Keycloak.md#6-local-development-without-kubernetes)):
 
 ```bash
-curl -u alice:password http://localhost:8080/api/tickets
+token() { curl -s http://localhost:8180/realms/tickets/protocol/openid-connect/token \
+  -d grant_type=password -d client_id=tickets-cli -d username=$1 -d password=password | jq -r .access_token; }
 
-curl -u alice:password -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $(token alice)" http://localhost:8080/api/tickets
+
+curl -H "Authorization: Bearer $(token alice)" -H 'Content-Type: application/json' \
   -d '{"title":"Laptop is slow","priority":"HIGH"}' http://localhost:8080/api/tickets
 
-curl -u agent:password -X POST http://localhost:8080/api/tickets/4/assign
+curl -H "Authorization: Bearer $(token agent)" -X POST http://localhost:8080/api/tickets/4/assign
 
-curl -u agent:password -H 'Content-Type: application/json' \
+curl -H "Authorization: Bearer $(token agent)" -H 'Content-Type: application/json' \
   -d '{"resolution":"Removed startup apps"}' http://localhost:8080/api/tickets/4/resolve
 ```
 
@@ -76,6 +79,9 @@ spring.datasource.password=${DB_PASSWORD:tickets}
 | `DB_NAME`     | `tickets`   | same as `POSTGRES_DB` of the db container               |
 | `DB_USER`     | `tickets`   | same as `POSTGRES_USER`                                 |
 | `DB_PASSWORD` | `tickets`   | same as `POSTGRES_PASSWORD`                             |
+| `KEYCLOAK_ISSUER_URI` | `http://localhost:8180/realms/tickets` | Keycloak's realm URL as the browser sees it (`iss` claim) |
+| `KEYCLOAK_JWK_SET_URI` | issuer + `/protocol/openid-connect/certs` | where to download Keycloak's public keys, if different from the issuer |
+| `KEYCLOAK_AUDIENCE` | `tickets-backend` | required value in the token's `aud` claim |
 
 ### 2. Overriding any Spring property (relaxed binding)
 
@@ -125,9 +131,11 @@ docker run -d --name tickets-db \
 mvn spring-boot:run
 ```
 
+For logging in, also start Keycloak on port 8180, see [Keycloak.md → Local development](../Keycloak.md#6-local-development-without-kubernetes). The backend starts without it; only requests with a token need it.
+
 ## Tests
 
-The tests use an in-memory **H2** database ([src/test/resources/application.properties](src/test/resources/application.properties)), so PostgreSQL is **not** needed:
+The tests use an in-memory **H2** database ([src/test/resources/application.properties](src/test/resources/application.properties)), so PostgreSQL is **not** needed. Keycloak is not needed either: the tests build the token claims in memory and pass them through the app's `JwtAuthenticationConverter`:
 
 ```bash
 mvn test
@@ -137,7 +145,7 @@ mvn test
 |-----------------------------------------------------------------------------------------|---------------------------------------|
 | [TicketServiceTest](src/test/java/gr/hua/dit/tickets/service/TicketServiceTest.java)     | unit test, Mockito, no Spring context |
 | [TicketRepositoryTest](src/test/java/gr/hua/dit/tickets/repository/TicketRepositoryTest.java) | `@DataJpaTest` slice (JPA only)  |
-| [TicketControllerTest](src/test/java/gr/hua/dit/tickets/web/TicketControllerTest.java)   | `@SpringBootTest` + MockMvc, incl. security |
+| [TicketControllerTest](src/test/java/gr/hua/dit/tickets/web/TicketControllerTest.java)   | `@SpringBootTest` + MockMvc, incl. security (JWT claims → user and roles) |
 | [TicketsApplicationTests](src/test/java/gr/hua/dit/tickets/TicketsApplicationTests.java) | context loads                         |
 
 ## Docker

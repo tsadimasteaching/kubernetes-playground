@@ -183,7 +183,7 @@ In a second terminal:
 
 ```bash
 echo "127.0.0.1 vue.local" | sudo tee -a /etc/hosts
-curl -u alice:password http://vue.local:8080/api/me
+curl -si http://vue.local:8080/api/me | head -1   # 401 + WWW-Authenticate: Bearer = Spring answered (login: Keycloak.md)
 ```
 
 ### Option B — MetalLB (replaces `minikube tunnel`)
@@ -203,7 +203,7 @@ Pick a few addresses in that subnet that nothing else uses and that are outside 
 microk8s enable metallb:192.168.1.240-192.168.1.250
 kubectl get svc -n traefik traefik      # EXTERNAL-IP is now e.g. 192.168.1.240
 echo "192.168.1.240 vue.local" | sudo tee -a /etc/hosts
-curl -u alice:password http://vue.local/api/me
+curl -si http://vue.local/api/me | head -1   # 401 + WWW-Authenticate: Bearer = Spring answered (login: Keycloak.md)
 ```
 
 The addon also creates the `IPAddressPool` and `L2Advertisement` (layer 2 mode) in the `metallb-system` namespace, so nothing else is needed.
@@ -227,7 +227,7 @@ helm upgrade --install traefik traefik/traefik -n traefik \
   --wait
 
 kubectl get svc -n traefik traefik      # EXTERNAL-IP shows 10.166.0.2
-curl -H "Host: vue.local" -u alice:password http://10.166.0.2/api/me
+curl -si -H "Host: vue.local" http://10.166.0.2/api/me | head -1   # 401 + WWW-Authenticate: Bearer = Spring answered (login: Keycloak.md)
 ```
 
 > Extra Service fields go under `service.spec` — the chart rejects `service.externalIPs` or `service.type`.
@@ -239,7 +239,7 @@ To reach it from your laptop:
 
 ```bash
 echo "<VM external IP> vue.local" | sudo tee -a /etc/hosts
-curl -u alice:password http://vue.local/api/me
+curl -si http://vue.local/api/me | head -1   # 401 + WWW-Authenticate: Bearer = Spring answered (login: Keycloak.md)
 ```
 
 With a DNS name pointing at the VM's external IP you can also serve the app publicly over HTTPS with a Let's Encrypt certificate: see [cert/README.md](cert/README.md).
@@ -254,7 +254,7 @@ helm upgrade --install traefik traefik/traefik -n traefik \
   --set ports.web.nodePort=30080 \
   --set ports.websecure.nodePort=30443
 
-curl --resolve vue.local:30080:127.0.0.1 -u alice:password http://vue.local:30080/api/me
+curl -si --resolve vue.local:30080:127.0.0.1 http://vue.local:30080/api/me | head -1   # 401 + WWW-Authenticate: Bearer = Spring answered (login: Keycloak.md)
 ```
 
 ---

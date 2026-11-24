@@ -1,4 +1,9 @@
 # HTTP Ingress for the Vue frontend, served by Traefik (see README → "Install the Traefik ingress controller").
+#
+# Two host names for the same Service:
+#   vue.local      – the original name (needs an /etc/hosts entry)
+#   vue.localhost  – use this one with Keycloak: browsers treat http://*.localhost as a "secure context",
+#                    which the Keycloak login library requires (see Keycloak.md), and resolve it to 127.0.0.1
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -10,6 +15,16 @@ spec:
   ingressClassName: traefik
   rules:
     - host: vue.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vue-svc
+                port:
+                  name: vue
+    - host: vue.localhost
       http:
         paths:
           - path: /

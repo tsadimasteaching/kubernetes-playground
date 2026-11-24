@@ -1,0 +1,123 @@
+# The whole Tickets app with Docker Compose: PostgreSQL, Spring backend, Vue frontend, Keycloak.
+#
+#   docker compose up --build -d        # first start: Keycloak needs ~1 minute
+#   docker compose ps                   # wait until everything is "healthy"
+#
+#   App:             http://localhost:8081      (alice / bob / agent, password "password")
+#   Keycloak admin:  http://localhost:8180/admin (admin / admin)
+#   Swagger UI:      http://localhost:8080/swagger-ui.html
+#
+#   docker compose down                 # stop (data is kept in the volumes)
+#   docker compose down -v              # stop and delete all data
+#
+# Same layout as the Kubernetes manifests, see Keycloak.md. The browser uses "localhost" URLs
+# (a secure context, required by the Keycloak login); the containers talk to each other by service name.
+
+name: kubernetes-playground   # unique project name: prefixes the containers, volumes and network
+
+services:
+  # ---- application database (postgres/ in Kubernetes) -------------------------
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: tickets
+      POSTGRES_USER: tickets
+      POSTGRES_PASSWORD: tickets
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tickets -d tickets"]
+      interval: 5s
+      retries: 10
+
+  # ---- Spring Boot API (spring/) -------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.multistage
+    image: tickets-backend:compose
+    environment:
+      DB_HOST: db
+      DB_NAME: tickets
+      DB_USER: tickets
+      DB_PASSWORD: tickets
+      # Must equal the "iss" claim = Keycloak's URL as the BROWSER sees it (published port 8180).
+      KEYCLOAK_ISSUER_URI: http://localhost:8180/realms/tickets
+      # The public keys are downloaded over the Compose network (inside this container,
+      # "localhost" is the container itself, not Keycloak).
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/tickets/protocol/openid-connect/certs
+    ports:
+      - "8080:8080"   # only for Swagger UI / curl; the browser goes through the frontend
+    depends_on:
+      db:
+        condition: service_healthy
+    # The image has a HEALTHCHECK on /actuator/health (backend/Dockerfile.multistage).
+
+  # ---- Vue frontend, served by nginx (vue/) --------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.multistage
+    image: tickets-frontend:compose
+    environment:
+      BACKEND_URL: http://backend:8080
+      # Served to the browser as /config.json
+      KEYCLOAK_URL: http://localhost:8180
+      KEYCLOAK_REALM: tickets
+      KEYCLOAK_CLIENT_ID: tickets-frontend
+    ports:
+      - "8081:8080"   # http://localhost:8081 is a redirect URI of the client tickets-frontend
+    depends_on:
+      backend:
+        condition: service_started   # nginx only needs the name "backend" to exist at startup
+
+  # ---- Keycloak's database (keycloak/keycloak-postgres.yaml) ---------------------
+  keycloak-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak-db-pass
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      retries: 10
+
+  # ---- Keycloak (keycloak/keycloak-deployment.yaml) ------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak-db-pass
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"   # URLs and "iss" follow the request: http://localhost:8180
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./keycloak/realm:/opt/keycloak/data/import:ro
+    ports:
+      - "8180:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      # The image has no curl/wget: send the HTTP request with bash's /dev/tcp.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 10s
+      start_period: 120s
+      retries: 6
+
+volumes:
+  db-data:
+  keycloak-db-data:
