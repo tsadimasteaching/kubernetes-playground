@@ -19,7 +19,7 @@ spec:
       containers:
       - name:  spring
         # Built from backend/Dockerfile.multistage
-        image:  ghcr.io/tsadimas/cp-spring:2026
+        image:  ghcr.io/tsadimas/cp-spring:keycloak
         livenessProbe:
           httpGet:
             path: "/actuator/health/liveness"

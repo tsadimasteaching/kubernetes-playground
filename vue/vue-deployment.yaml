@@ -20,7 +20,7 @@ spec:
       containers:
       - name:  vue
         # Built from frontend/Dockerfile.multistage
-        image:  ghcr.io/tsadimas/cp-vue:2026
+        image:  ghcr.io/tsadimas/cp-vue:keycloak
         env:
         # Where nginx forwards /api/* (frontend/nginx/default.conf.template).
         # "spring" is the backend Service, so it must exist before this pod starts.
