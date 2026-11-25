@@ -1,0 +1,22 @@
+# Init script for the shared PostgreSQL instance.
+# The postgres Docker image runs every *.sh file in /docker-entrypoint-initdb.d/ on the
+# FIRST start (empty data directory). This script creates the Keycloak user and database
+# so that keycloak-deployment.yaml can point at the same StatefulSet as the app.
+#
+# The script reads KC_DB_USERNAME and KC_DB_PASSWORD from the environment; those env vars
+# are set in postgres-statefulset.yaml from the same Secret that Keycloak uses.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  labels:
+    app: postgres
+data:
+  init-keycloak.sh: |
+    #!/bin/bash
+    set -e
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+    CREATE USER "$KC_DB_USERNAME" WITH PASSWORD '$KC_DB_PASSWORD';
+    CREATE DATABASE keycloak OWNER "$KC_DB_USERNAME";
+    GRANT ALL PRIVILEGES ON DATABASE keycloak TO "$KC_DB_USERNAME";
+    EOSQL

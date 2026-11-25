@@ -111,9 +111,8 @@ docker push ghcr.io/<GITHUB-USERNAME>/cp-vue:keycloak
 Details in [keycloak/README.md → Deploy](keycloak/README.md#deploy):
 
 ```bash
+# Apply the secret first: the postgres init script reads the credentials from it
 kubectl apply -f keycloak/keycloak-secret.yaml
-kubectl apply -f keycloak/keycloak-postgres.yaml
-kubectl rollout status statefulset/keycloak-postgres
 
 kubectl create configmap keycloak-realm --from-file=keycloak/realm/tickets-realm.json
 kubectl apply -f keycloak/keycloak-deployment.yaml -f keycloak/keycloak-svc.yaml -f keycloak/keycloak-ingress.yaml
@@ -134,7 +133,7 @@ kubectl rollout status deployment/spring-deployment
 Order does not matter much: Spring starts without Keycloak (it fetches the keys at the first request), and nginx does not contact Keycloak at all.
 
 ```bash
-kubectl get pods            # keycloak, keycloak-postgres-0, postgres-0, spring-…, vue-…  all Running 1/1
+kubectl get pods            # keycloak, postgres-0, spring-…, vue-…  all Running 1/1
 kubectl get ingress         # keycloak-ingress (keycloak.localhost), vue-ingress (vue.local, vue.localhost)
 ```
 

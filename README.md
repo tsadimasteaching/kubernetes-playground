@@ -238,7 +238,7 @@ kubectl apply -f vue/vue-deployment.yaml -f vue/vue-svc.yaml -f vue/vue-ingress.
 Then Keycloak, which handles the login ([Keycloak.md → Deploy](Keycloak.md#2-deploy)):
 
 ```bash
-kubectl apply -f keycloak/keycloak-secret.yaml -f keycloak/keycloak-postgres.yaml
+kubectl apply -f keycloak/keycloak-secret.yaml   # apply before postgres (init script reads it)
 kubectl create configmap keycloak-realm --from-file=keycloak/realm/tickets-realm.json
 kubectl apply -f keycloak/keycloak-deployment.yaml -f keycloak/keycloak-svc.yaml -f keycloak/keycloak-ingress.yaml
 kubectl rollout status deployment/keycloak --timeout=5m     # first start: 1-2 minutes

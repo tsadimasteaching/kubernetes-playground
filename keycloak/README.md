@@ -7,14 +7,15 @@ This directory runs Keycloak in the cluster for the Tickets app. **How the backe
 | File | What it creates |
 | --- | --- |
 | [keycloak-secret.yaml](keycloak-secret.yaml) | Secret `keycloak-secrets`: the first admin user and the database credentials |
-| [keycloak-postgres.yaml](keycloak-postgres.yaml) | Keycloak's own PostgreSQL: StatefulSet + headless Service `keycloak-postgres` |
 | [realm/tickets-realm.json](realm/tickets-realm.json) | the realm `tickets`: clients, roles, demo users. Loaded into the ConfigMap `keycloak-realm` |
 | [keycloak-deployment.yaml](keycloak-deployment.yaml) | Deployment `keycloak` (image `quay.io/keycloak/keycloak:26.8.2`), production mode, imports the realm |
 | [keycloak-svc.yaml](keycloak-svc.yaml) | ClusterIP Service `keycloak`, port 8080 |
 | [keycloak-ingress.yaml](keycloak-ingress.yaml) | HTTP Ingress for **`keycloak.localhost`** (Traefik, entrypoint `web`) |
 | [keycloak-ingress-letsencrypt.yaml](keycloak-ingress-letsencrypt.yaml) | public **HTTPS** Ingress with Let's Encrypt, only on a cluster reachable from the internet |
 
-![Kubernetes objects of keycloak/: Ingress, Service keycloak, Deployment keycloak with the realm ConfigMap and the Secret, headless Service keycloak-postgres, StatefulSet keycloak-postgres-0 with its PVC; Spring fetches the public keys from Service keycloak](../docs/images/keycloak-components.png)
+Keycloak's database lives in the **shared** `postgres` StatefulSet (see [postgres/README.md](../postgres/README.md)). The `keycloak` database and user are created by an init script ([postgres/postgres-init.yaml](../postgres/postgres-init.yaml)) on the first start of that pod.
+
+![Kubernetes objects of keycloak/: Ingress, Service keycloak, Deployment keycloak with the realm ConfigMap and the Secret; Spring fetches the public keys from Service keycloak; both Keycloak and Spring share the postgres StatefulSet](../docs/images/keycloak-components.png)
 
 The browser talks to Keycloak **directly** (login page, token requests). The Spring backend only downloads Keycloak's **public keys** over the internal Service, to verify the signature of the tokens.
 
@@ -25,7 +26,7 @@ The browser talks to Keycloak **directly** (login page, token requests). The Spr
 | What | Why | How to check |
 | --- | --- | --- |
 | Traefik ingress controller | serves `keycloak-ingress.yaml` | `kubectl get ingressclass` ([main README](../README.md#install-the-traefik-ingress-controller)) |
-| Default StorageClass | for the PVC of `keycloak-postgres` | `kubectl get storageclass` (`standard` on minikube, `microk8s-hostpath` on MicroK8s) |
+| `postgres` StatefulSet running | Keycloak's database is the `keycloak` database on the shared postgres | `kubectl get statefulset postgres` ([postgres/README.md](../postgres/README.md)) |
 | ~1 GB free memory | Keycloak is a Java (Quarkus) server; the limit is 1Gi | `kubectl top nodes` (needs metrics-server) |
 
 ---
@@ -34,16 +35,14 @@ The browser talks to Keycloak **directly** (login page, token requests). The Spr
 
 ```bash
 # 1. credentials (change the passwords first for anything but a local playground)
+#    Must be applied BEFORE postgres so the init script can read the credentials.
 kubectl apply -f keycloak/keycloak-secret.yaml
 
-# 2. Keycloak's database
-kubectl apply -f keycloak/keycloak-postgres.yaml
-kubectl rollout status statefulset/keycloak-postgres
-
-# 3. the realm, as a ConfigMap built from the JSON file
+# 2. the realm, as a ConfigMap built from the JSON file
 kubectl create configmap keycloak-realm --from-file=keycloak/realm/tickets-realm.json
 
-# 4. Keycloak, its Service and Ingress
+# 3. Keycloak, its Service and Ingress
+#    (postgres must already be running — it hosts the "keycloak" database)
 kubectl apply -f keycloak/keycloak-deployment.yaml -f keycloak/keycloak-svc.yaml -f keycloak/keycloak-ingress.yaml
 kubectl rollout status deployment/keycloak --timeout=5m
 ```
@@ -88,8 +87,8 @@ Keycloak is configured with `KC_*` environment variables ([all options](https://
 | Variable | Value | Meaning |
 | --- | --- | --- |
 | *(args)* | `start --import-realm` | **production mode**. `start-dev` would use an embedded H2 database, plain HTTP everywhere and caching off: fine on a laptop, not in a cluster |
-| `KC_DB`, `KC_DB_URL` | `postgres`, `jdbc:postgresql://keycloak-postgres:5432/keycloak` | Keycloak's own database |
-| `KC_DB_USERNAME`, `KC_DB_PASSWORD` | from Secret `keycloak-secrets` | the same keys set `POSTGRES_USER` / `POSTGRES_PASSWORD` of the database |
+| `KC_DB`, `KC_DB_URL` | `postgres`, `jdbc:postgresql://postgres:5432/keycloak` | Keycloak's database on the shared postgres StatefulSet |
+| `KC_DB_USERNAME`, `KC_DB_PASSWORD` | from Secret `keycloak-secrets` | the user and database created by [postgres/postgres-init.yaml](../postgres/postgres-init.yaml) on first init |
 | `KC_BOOTSTRAP_ADMIN_USERNAME`, `..._PASSWORD` | from Secret `keycloak-secrets` | temporary admin of the `master` realm, created only when the database is **empty** |
 | `KC_HTTP_ENABLED` | `true` | allow plain HTTP. TLS is terminated by Traefik, which forwards plain HTTP inside the cluster |
 | `KC_HOSTNAME_STRICT` | `false` | no fixed public URL: Keycloak uses the URL each request was sent to (see below) |
@@ -283,10 +282,11 @@ To apply an edited JSON file, start from an empty realm:
 kubectl create configmap keycloak-realm --from-file=keycloak/realm/tickets-realm.json --dry-run=client -o yaml | kubectl apply -f -
 kubectl rollout restart deployment/keycloak
 
-# b) or wipe all of Keycloak's data (the database volume)
-kubectl delete -f keycloak/keycloak-deployment.yaml -f keycloak/keycloak-postgres.yaml
-kubectl delete pvc data-keycloak-postgres-0
-# ... then deploy again
+# b) or wipe all of Keycloak's data (drop the keycloak database from the shared postgres)
+kubectl delete -f keycloak/keycloak-deployment.yaml
+kubectl exec -it postgres-0 -- psql -U dbuser -c "DROP DATABASE keycloak;" -c "DROP USER keycloak;"
+# ... then deploy Keycloak again (postgres re-runs the init script only on a fresh PVC;
+#     for an existing PVC you must recreate the database manually as above)
 ```
 
 To go the other way and save the changes you made in the console as JSON: *Realm settings* → *Action* → *Partial export* (users and secrets are not included).
@@ -347,8 +347,9 @@ Behind HTTPS, `KC_PROXY_HEADERS=xforwarded` is what makes Keycloak generate `htt
 | Symptom | Likely cause |
 | --- | --- |
 | Pod `0/1` for minutes, restarts | first start is slow (build + schema). Check `kubectl logs deploy/keycloak`. If the startup probe gave up, the database may be unreachable |
-| Log: `Connection to keycloak-postgres:5432 refused` | `keycloak-postgres-0` is not Ready yet. `kubectl rollout status statefulset/keycloak-postgres` |
-| Log: `password authentication failed for user "keycloak"` | the Secret was changed after the database was created. Postgres keeps the first password: restore it, or delete the PVC `data-keycloak-postgres-0` |
+| Log: `Connection to postgres:5432 refused` | `postgres-0` is not Ready yet. `kubectl rollout status statefulset/postgres` |
+| Log: `password authentication failed for user "keycloak"` | the Secret was changed after the database was created. Restore it, or drop and recreate the user: `kubectl exec -it postgres-0 -- psql -U dbuser -c "ALTER USER keycloak WITH PASSWORD 'new-pass';"` |
+| Log: `database "keycloak" does not exist` | the init script did not run (PVC already existed). Create the database manually: `kubectl exec -it postgres-0 -- psql -U dbuser -c "CREATE USER keycloak WITH PASSWORD 'keycloak-db-pass'; CREATE DATABASE keycloak OWNER keycloak;"` |
 | Pod `ContainerCreating`, event `configmap "keycloak-realm" not found` | step 3 of [Deploy](#deploy) was skipped |
 | Pod `OOMKilled` | raise `limits.memory`; Keycloak needs at least ~700 MiB |
 | Browser: *"Web Crypto API is not available"* | page opened over plain HTTP on a name other than `localhost` / `*.localhost`. Use `keycloak.localhost` / `vue.localhost`, or HTTPS |
@@ -362,8 +363,9 @@ Behind HTTPS, `KC_PROXY_HEADERS=xforwarded` is what makes Keycloak generate `htt
 ```bash
 kubectl delete -f keycloak/keycloak-ingress.yaml -f keycloak/keycloak-svc.yaml -f keycloak/keycloak-deployment.yaml --ignore-not-found
 kubectl delete configmap keycloak-realm --ignore-not-found
-kubectl delete -f keycloak/keycloak-postgres.yaml -f keycloak/keycloak-secret.yaml --ignore-not-found
-kubectl delete pvc data-keycloak-postgres-0      # deletes all Keycloak data (users, sessions, realm changes)
+kubectl delete -f keycloak/keycloak-secret.yaml --ignore-not-found
+# To also remove Keycloak's data from the shared postgres:
+kubectl exec -it postgres-0 -- psql -U dbuser -c "DROP DATABASE IF EXISTS keycloak; DROP USER IF EXISTS keycloak;"
 ```
 
 ## Links

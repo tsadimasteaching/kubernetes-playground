@@ -31,12 +31,26 @@ spec:
             # create a lost+found directory at the volume root, which makes initdb fail.
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            # Keycloak's database credentials — read by postgres-init.yaml's init script,
+            # which creates the "keycloak" user and database on the first start.
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: db-username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: db-password
           ports:
             - containerPort: 5432
               name: postgres
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "dbuser", "-d", "dsdb"]
@@ -55,6 +69,11 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: postgres-init
+            defaultMode: 0755
   # One PersistentVolumeClaim per pod, created automatically: data-postgres-0.
   # It is NOT deleted when the StatefulSet is deleted, so the data survives.
   volumeClaimTemplates:

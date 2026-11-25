@@ -1,13 +1,19 @@
 # PostgreSQL: StatefulSet + Services + Volume
 
-A single-instance PostgreSQL 16 database running as a StatefulSet with persistent storage. The [Spring backend](../spring/README.md) uses it.
+A single-instance PostgreSQL 16 database running as a StatefulSet with persistent storage. Both the [Spring backend](../spring/README.md) and [Keycloak](../keycloak/README.md) use it, each in their own database.
 
 - `postgres-statefulset.yaml` – the StatefulSet (`postgres-0`) with a `volumeClaimTemplate` (1Gi, default StorageClass), probes (`pg_isready`) and resource limits
 - `postgres-svc.yaml` – two Services:
   - `postgres` (ClusterIP): what applications use, e.g. `jdbc:postgresql://postgres:5432/dsdb`
   - `postgres-headless` (`clusterIP: None`): required by the StatefulSet; gives the pod a stable DNS name `postgres-0.postgres-headless`
+- `postgres-init.yaml` – ConfigMap with an init script that creates the `keycloak` user and database on first start
 
-Database `dsdb`, user `dbuser`, password `pass123` (plain text for simplicity; use a `Secret` with `secretKeyRef` in real deployments).
+| Database | User | Used by |
+| --- | --- | --- |
+| `dsdb` | `dbuser` / `pass123` | Spring backend |
+| `keycloak` | `keycloak` / from `keycloak-secrets` | Keycloak identity provider |
+
+> The init script in `postgres-init.yaml` runs **only on the first start** (empty data directory). If the PVC already exists, create the database manually: `kubectl exec -it postgres-0 -- psql -U dbuser -c "CREATE USER keycloak WITH PASSWORD 'keycloak-db-pass'; CREATE DATABASE keycloak OWNER keycloak;"`
 
 ## Prerequisites
 

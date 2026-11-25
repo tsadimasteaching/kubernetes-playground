@@ -70,18 +70,17 @@ def architecture():
                 spring = Spring("spring-deployment")
             with Cluster("database (postgres/)"):
                 pg_svc = Service("postgres :5432")
-                pg = PostgreSQL("postgres-0\n(StatefulSet)")
+                pg = PostgreSQL("postgres-0\n(StatefulSet)\ndsdb + keycloak")
             with Cluster("login (keycloak/)"):
                 kc_svc = Service("keycloak :8080")
                 kc = Keycloak("keycloak")
-                kc_pg = PostgreSQL("keycloak-postgres-0\n(StatefulSet)")
 
         browser >> http("HTTP / HTTPS") >> traefik
         traefik >> http("vue.localhost\nor public name") >> vue_svc >> vue
         vue >> http("/api/*") >> spring_svc >> spring
         spring >> db() >> pg_svc >> pg
         traefik >> http("keycloak.localhost\n(login page, tokens)") >> kc_svc >> kc
-        kc >> db() >> kc_pg
+        kc >> db() >> pg_svc
         spring >> keys() >> kc_svc
 
 
@@ -158,16 +157,15 @@ def keycloak_overview():
             with Cluster("login"):
                 kc_svc = Service("keycloak :8080")
                 kc = Keycloak("Keycloak\nrealm tickets")
-                kc_pg = PostgreSQL("keycloak-postgres")
             with Cluster("app"):
                 vue_svc = Service("vue-svc")
                 nginx = Nginx("nginx\n/ , /config.json")
                 spring = Spring("spring")
-                pg = PostgreSQL("postgres")
+                pg = PostgreSQL("postgres\n(dsdb + keycloak)")
 
         browser >> http("1  keycloak.localhost:8080\nlogin page, tokens") >> traefik
         browser >> http("2  vue.localhost:8080\napp + API (Bearer token)") >> traefik
-        traefik >> http("Host keycloak.localhost") >> kc_svc >> kc >> db("") >> kc_pg
+        traefik >> http("Host keycloak.localhost") >> kc_svc >> kc >> db("") >> pg
         traefik >> http("Host vue.localhost") >> vue_svc >> nginx >> http("/api/*") >> spring >> db("") >> pg
         spring >> keys("3  public keys (JWKS)\nonce, cluster-internal\nhttp://keycloak:8080") >> kc_svc
 
@@ -199,9 +197,11 @@ def keycloak_components():
                 kc = Keycloak("Keycloak 26\nstart --import-realm")
             cm = ConfigMap("keycloak-realm\n(tickets-realm.json)")
             secret = Secret("keycloak-secrets\nadmin + DB credentials")
-            pg_svc = Service("keycloak-postgres\n(headless) :5432")
-            pg = PostgreSQL("keycloak-postgres-0\n(StatefulSet)")
-            pvc = PVC("data-keycloak-postgres-0\nrealm, users, sessions")
+        with Cluster("postgres/"):
+            pg_svc = Service("Service postgres\n:5432")
+            pg = PostgreSQL("postgres-0\n(StatefulSet)")
+            init_cm = ConfigMap("postgres-init\n(init-keycloak.sh)")
+            pvc = PVC("data-postgres-0\ndsdb + keycloak")
         with Cluster("app"):
             nginx = Nginx("vue pod (nginx)")
             spring = Spring("spring pod")
@@ -211,7 +211,8 @@ def keycloak_components():
         traefik >> http() >> svc >> kc
         cm >> Edge(label="mounted in\n/opt/keycloak/data/import", style="dashed") >> kc
         secret >> Edge(label="env", style="dashed") >> kc
-        secret >> Edge(label="env", style="dashed") >> pg
+        secret >> Edge(label="env (init script)", style="dashed") >> pg
+        init_cm >> Edge(label="mounted in\n/docker-entrypoint-initdb.d", style="dashed") >> pg
         kc >> db() >> pg_svc >> pg
         pg - pvc
         browser >> http("vue.localhost:8080") >> nginx >> http("/api/*") >> spring
