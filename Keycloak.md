@@ -27,7 +27,7 @@ This file explains the whole setup and how the backend and frontend were changed
 
 | Component | Before | Now |
 | --- | --- | --- |
-| Users and passwords | in memory, in [SecurityConfig.java](backend/src/main/java/gr/hua/dit/tickets/config/SecurityConfig.java) | in Keycloak (realm `tickets`), stored in its own PostgreSQL |
+| Users and passwords | in memory, in [SecurityConfig.java](backend/src/main/java/gr/hua/dit/tickets/config/SecurityConfig.java) | in Keycloak (realm `tickets`), stored in the shared `postgres-0` StatefulSet (`keycloak` database) |
 | Login page | Vue form | Keycloak's login page |
 | What each API call carries | `Authorization: Basic base64(alice:password)` | `Authorization: Bearer <access token>` |
 | Backend checks | password against the in-memory list | token signature, issuer, expiry, audience |
@@ -94,6 +94,10 @@ Browsers (Chrome, Edge, Firefox) and `curl` resolve every `*.localhost` name to 
 ## 2. Deploy
 
 Starting point: the app deployed as in the [main README](README.md#3-deploy-the-application) (postgres, spring, vue) and Traefik installed.
+
+> **Fresh deploy:** `keycloak-secret.yaml` must be applied *before* `postgres/`, because the postgres StatefulSet reads the Keycloak database credentials from that Secret to run the init script. The main README's deploy order already reflects this.
+>
+> **Existing postgres (PVC already has data):** the init script only runs on a first (empty) start. Create the `keycloak` database manually: `kubectl exec -it postgres-0 -- psql -U dbuser -c "CREATE USER keycloak WITH PASSWORD 'keycloak-db-pass'; CREATE DATABASE keycloak OWNER keycloak;"`
 
 ### 2.1 Build images with the new code
 

@@ -225,20 +225,21 @@ kubectl create secret docker-registry registry-credentials --from-file=.dockerco
 
 ## 3. Deploy the application
 
-Apply the tiers in order: the database first, since Spring connects to it on startup, and the `spring` Service before Vue, since the frontend's nginx looks up that name when it starts:
+Apply the tiers in order. The Keycloak secret must come first because the postgres StatefulSet reads the Keycloak database credentials from it via `secretKeyRef`:
 
 ```bash
+# 1. Keycloak credentials — must exist before postgres starts (StatefulSet references keycloak-secrets)
+kubectl apply -f keycloak/keycloak-secret.yaml
+
+# 2. Database — init script creates both "dsdb" (app) and "keycloak" databases on first start
 kubectl apply -f postgres/
 kubectl rollout status statefulset/postgres   # wait until postgres-0 is Ready
 
+# 3. Backend and frontend
 kubectl apply -f spring/
 kubectl apply -f vue/vue-deployment.yaml -f vue/vue-svc.yaml -f vue/vue-ingress.yaml
-```
 
-Then Keycloak, which handles the login ([Keycloak.md → Deploy](Keycloak.md#2-deploy)):
-
-```bash
-kubectl apply -f keycloak/keycloak-secret.yaml   # apply before postgres (init script reads it)
+# 4. Keycloak — details in Keycloak.md → Deploy
 kubectl create configmap keycloak-realm --from-file=keycloak/realm/tickets-realm.json
 kubectl apply -f keycloak/keycloak-deployment.yaml -f keycloak/keycloak-svc.yaml -f keycloak/keycloak-ingress.yaml
 kubectl rollout status deployment/keycloak --timeout=5m     # first start: 1-2 minutes

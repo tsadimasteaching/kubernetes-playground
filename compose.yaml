@@ -71,7 +71,7 @@ services:
       backend:
         condition: service_started   # nginx only needs the name "backend" to exist at startup
 
-  # ---- Keycloak's database (keycloak/keycloak-postgres.yaml) ---------------------
+  # ---- Keycloak's database (separate service in Compose; shared postgres StatefulSet in Kubernetes) ----
   keycloak-db:
     image: postgres:16
     environment:
