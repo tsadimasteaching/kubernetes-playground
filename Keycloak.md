@@ -97,13 +97,13 @@ Starting point: the app deployed as in the [main README](README.md#3-deploy-the-
 
 ### 2.1 Build images with the new code
 
-The images `ghcr.io/tsadimas/cp-spring:2026` and `cp-vue:2026` must contain the Keycloak version of [backend/](backend/) and [frontend/](frontend/). If they were built before this change, rebuild and push them, or build them into minikube ([main README → Container registry](README.md#2-container-registry-github-packages)):
+The images `ghcr.io/tsadimas/cp-spring:keycloak` and `cp-vue:keycloak` must contain the Keycloak version of [backend/](backend/) and [frontend/](frontend/). If they were built before this change, rebuild and push them, or build them into minikube ([main README → Container registry](README.md#2-container-registry-github-packages)):
 
 ```bash
-docker build -t ghcr.io/<GITHUB-USERNAME>/cp-spring:2026 -f backend/Dockerfile.multistage  backend
-docker build -t ghcr.io/<GITHUB-USERNAME>/cp-vue:2026    -f frontend/Dockerfile.multistage frontend
-docker push ghcr.io/<GITHUB-USERNAME>/cp-spring:2026
-docker push ghcr.io/<GITHUB-USERNAME>/cp-vue:2026
+docker build -t ghcr.io/<GITHUB-USERNAME>/cp-spring:keycloak -f backend/Dockerfile.multistage  backend
+docker build -t ghcr.io/<GITHUB-USERNAME>/cp-vue:keycloak    -f frontend/Dockerfile.multistage frontend
+docker push ghcr.io/<GITHUB-USERNAME>/cp-spring:keycloak
+docker push ghcr.io/<GITHUB-USERNAME>/cp-vue:keycloak
 ```
 
 ### 2.2 Keycloak
@@ -388,14 +388,14 @@ Open <http://localhost:5173>: `http://localhost:5173/*` is a valid redirect URI 
 On a cluster reachable from the internet ([cert/README.md](cert/README.md)), Keycloak gets its own public name and certificate. Over HTTPS the browser has a secure context, so any host name works.
 
 1. Create a DNS record for Keycloak (e.g. `keycloak.tsadimas.dns-cloud.net`) pointing at Traefik, set it in [keycloak-ingress-letsencrypt.yaml](keycloak/keycloak-ingress-letsencrypt.yaml) and apply it (after `vue/vue-ingress-letsencrypt.yaml`). See [keycloak/README.md → Public HTTPS](keycloak/README.md#public-https).
-2. Point the apps at the public Keycloak URL:
+2. Point the apps at the public Keycloak URL — apply the letsencrypt deployment variants (they set `KEYCLOAK_ISSUER_URI` and `KEYCLOAK_URL` to the public HTTPS host):
 
    ```bash
-   kubectl set env deployment/spring-deployment KEYCLOAK_ISSUER_URI=https://keycloak.tsadimas.dns-cloud.net/realms/tickets
-   kubectl set env deployment/vue-deployment    KEYCLOAK_URL=https://keycloak.tsadimas.dns-cloud.net
+   kubectl apply -f spring/spring-deployment-letsencrypt.yaml
+   kubectl apply -f vue/vue-deployment-letsencrypt.yaml
    ```
 
-   (or change the values in the YAML files; `kubectl apply` would otherwise set them back). `KEYCLOAK_JWK_SET_URI` stays internal.
+   `KEYCLOAK_JWK_SET_URI` stays internal (Spring fetches signing keys pod-to-pod).
 3. The frontend's public URL `https://tickets.tsadimas.dns-cloud.net/*` is already a valid redirect URI in [tickets-realm.json](keycloak/realm/tickets-realm.json). For another name, add it in the admin console (*Clients* → `tickets-frontend` → *Valid redirect URIs*).
 4. Change the admin password and the demo users' passwords: the instance is now on the internet.
 

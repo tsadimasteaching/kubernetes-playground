@@ -1,0 +1,73 @@
+# Spring Boot backend deployment for public HTTPS (Let's Encrypt) with Keycloak on its public URL.
+# Apply instead of spring-deployment.yaml when using keycloak-ingress-letsencrypt.yaml.
+# Change the KEYCLOAK_ISSUER_URI host to match keycloak-ingress-letsencrypt.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  spring-deployment
+  namespace: default
+  labels:
+    app: spring
+spec:
+  selector:
+    matchLabels:
+      app: spring
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: spring
+    spec:
+      containers:
+      - name:  spring
+        # Built from backend/Dockerfile.multistage
+        image:  ghcr.io/tsadimas/cp-spring:keycloak
+        livenessProbe:
+          httpGet:
+            path: "/actuator/health/liveness"
+            port: 8080
+          failureThreshold: 20
+          periodSeconds: 10
+          initialDelaySeconds: 30
+        readinessProbe:
+            httpGet:
+              path: "/actuator/health/readiness"
+              port: 8080
+            failureThreshold: 10
+            periodSeconds: 10
+            initialDelaySeconds: 30
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        env:
+        # Read by backend/src/main/resources/application.properties:
+        #   jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+        - name: DB_HOST
+          value: postgres          # the postgres Service (postgres/postgres-svc.yaml)
+        - name: DB_NAME
+          value: dsdb
+        - name: DB_USER
+          value: dbuser
+        - name: DB_PASSWORD
+          value: pass123
+        # ---- Keycloak (backend/src/main/resources/application.properties) ----
+        # Must be EXACTLY the "iss" claim of the tokens = the Keycloak URL the BROWSER uses.
+        # Must match the public host in keycloak-ingress-letsencrypt.yaml.
+        - name: KEYCLOAK_ISSUER_URI
+          value: https://keycloak.tsadimas.dns-cloud.net/realms/tickets
+        # Where Spring downloads the signing keys: the internal Service, not the browser URL.
+        - name: KEYCLOAK_JWK_SET_URI
+          value: http://keycloak:8080/realms/tickets/protocol/openid-connect/certs
+        # Heap = 60% of the 512Mi memory limit. The image default (75%) leaves too
+        # little room for the JVM's non-heap memory and risks an OOMKill.
+        - name: JAVA_TOOL_OPTIONS
+          value: "-XX:MaxRAMPercentage=60.0"
+        ports:
+        - containerPort:  8080
+          name:  spring
+      imagePullSecrets:
+      - name: registry-credentials

@@ -4,7 +4,8 @@ The Spring Boot REST API of the Tickets app (source in [backend/](../backend/REA
 
 The backend has **no Ingress**: it is not reachable from outside the cluster. The [Vue frontend](../vue/README.md)'s nginx forwards every `/api/*` request to the Service `spring`, so the browser only ever talks to the frontend. For Swagger UI or direct API tests, use `kubectl port-forward` (see [Testing](#testing)).
 
-- `spring-deployment.yaml` – the Deployment: image `ghcr.io/tsadimas/cp-spring:2026` (built from [backend/Dockerfile.multistage](../backend/Dockerfile.multistage)), database connection through environment variables (see below), liveness/readiness probes on Spring Boot Actuator, resource limits, `imagePullSecrets: registry-credentials`
+- `spring-deployment.yaml` – the Deployment: image `ghcr.io/tsadimas/cp-spring:keycloak` (built from [backend/Dockerfile.multistage](../backend/Dockerfile.multistage)), database connection through environment variables (see below), liveness/readiness probes on Spring Boot Actuator, resource limits, `imagePullSecrets: registry-credentials`
+- `spring-deployment-letsencrypt.yaml` – same Deployment with `KEYCLOAK_ISSUER_URI=https://keycloak.tsadimas.dns-cloud.net/realms/tickets`; apply instead of `spring-deployment.yaml` when using `keycloak-ingress-letsencrypt.yaml`
 - `spring-svc.yaml` – ClusterIP Service `spring`, port 8080 (port name `spring`)
 
 ![Browser → Traefik → vue pod (nginx) → Service spring → Pod spring → Service postgres → postgres-0 with its PVC](../docs/images/spring.png)
@@ -18,7 +19,7 @@ The backend has **no Ingress**: it is not reachable from outside the cluster. Th
 | `DB_HOST` | `postgres` | the PostgreSQL Service name |
 | `DB_PORT` | not set, default `5432` | |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `dsdb` / `dbuser` / `pass123` | must match `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` in [postgres-statefulset.yaml](../postgres/postgres-statefulset.yaml) |
-| `KEYCLOAK_ISSUER_URI` | `http://keycloak.localhost:8080/realms/tickets` | must equal the `iss` claim of the tokens = Keycloak's URL **as the browser sees it** |
+| `KEYCLOAK_ISSUER_URI` | `http://keycloak.localhost:8080/realms/tickets` (local) / `https://keycloak.tsadimas.dns-cloud.net/realms/tickets` (public HTTPS) | must equal the `iss` claim of the tokens = Keycloak's URL **as the browser sees it** |
 | `KEYCLOAK_JWK_SET_URI` | `http://keycloak:8080/realms/tickets/protocol/openid-connect/certs` | where Spring downloads Keycloak's public keys (the internal Service) |
 | `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=60.0` | heap = 60% of the 512Mi limit, leaving room for the JVM's non-heap memory |
 

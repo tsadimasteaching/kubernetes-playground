@@ -143,8 +143,8 @@ Your packages are listed under the *Packages* tab of your GitHub profile.
 
 | Deployment | Image | Built from |
 | --- | --- | --- |
-| `spring-deployment` | `ghcr.io/tsadimas/cp-spring:2026` | [backend/Dockerfile.multistage](backend/Dockerfile.multistage) |
-| `vue-deployment` | `ghcr.io/tsadimas/cp-vue:2026` | [frontend/Dockerfile.multistage](frontend/Dockerfile.multistage) |
+| `spring-deployment` | `ghcr.io/tsadimas/cp-spring:keycloak` | [backend/Dockerfile.multistage](backend/Dockerfile.multistage) |
+| `vue-deployment` | `ghcr.io/tsadimas/cp-vue:keycloak` | [frontend/Dockerfile.multistage](frontend/Dockerfile.multistage) |
 
 > New GitHub packages are **private** by default. Either make them public (package → *Package settings* → *Change visibility*) or create the `registry-credentials` secret below.
 
@@ -154,15 +154,15 @@ To use your own fork or registry account, build from the repository root and cha
 
 ```bash
 # build and tag
-docker build -t ghcr.io/<GITHUB-USERNAME>/cp-spring:2026 -f backend/Dockerfile.multistage  backend
-docker build -t ghcr.io/<GITHUB-USERNAME>/cp-vue:2026    -f frontend/Dockerfile.multistage frontend
+docker build -t ghcr.io/<GITHUB-USERNAME>/cp-spring:keycloak -f backend/Dockerfile.multistage  backend
+docker build -t ghcr.io/<GITHUB-USERNAME>/cp-vue:keycloak    -f frontend/Dockerfile.multistage frontend
 
 # log in to the registry
 cat ~/github-image-repo.txt | docker login ghcr.io -u <GITHUB-USERNAME> --password-stdin
 
 # push
-docker push ghcr.io/<GITHUB-USERNAME>/cp-spring:2026
-docker push ghcr.io/<GITHUB-USERNAME>/cp-vue:2026
+docker push ghcr.io/<GITHUB-USERNAME>/cp-spring:keycloak
+docker push ghcr.io/<GITHUB-USERNAME>/cp-vue:keycloak
 ```
 
 ### Without a registry (minikube)
@@ -337,9 +337,12 @@ helm install cert-manager jetstack/cert-manager \
   --namespace cert-manager --create-namespace \
   --version v1.21.3 --set crds.enabled=true
 
-kubectl apply -f cert/letsencrypt-prod-issuer.yaml         # ClusterIssuer letsencrypt-prod
-kubectl apply -f vue/vue-ingress-letsencrypt.yaml          # set your host name in it first
-kubectl get certificate                                    # vue-letsencrypt-tls → READY True
+kubectl apply -f cert/letsencrypt-prod-issuer.yaml                  # ClusterIssuer letsencrypt-prod
+kubectl apply -f vue/vue-ingress-letsencrypt.yaml                   # set your host name in it first
+kubectl apply -f keycloak/keycloak-ingress-letsencrypt.yaml         # Keycloak public HTTPS
+kubectl apply -f spring/spring-deployment-letsencrypt.yaml          # KEYCLOAK_ISSUER_URI → public URL
+kubectl apply -f vue/vue-deployment-letsencrypt.yaml                # KEYCLOAK_URL → public URL
+kubectl get certificate                                             # vue-letsencrypt-tls + keycloak-letsencrypt-tls → READY True
 
 curl -I https://tickets.tsadimas.dns-cloud.net/            # 200, no -k needed
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://tickets.tsadimas.dns-cloud.net/   # 301 https://...

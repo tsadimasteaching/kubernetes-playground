@@ -1,0 +1,61 @@
+# Vue frontend deployment for public HTTPS (Let's Encrypt) with Keycloak on its public URL.
+# Apply instead of vue-deployment.yaml when using vue-ingress-letsencrypt.yaml.
+# Change the KEYCLOAK_URL host to match keycloak-ingress-letsencrypt.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name:  vue-deployment
+  namespace: default
+  labels:
+    app: vue
+spec:
+  selector:
+    matchLabels:
+      app: vue
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vue
+    spec:
+      containers:
+      - name:  vue
+        # Built from frontend/Dockerfile.multistage
+        image:  ghcr.io/tsadimas/cp-vue:keycloak
+        env:
+        # Where nginx forwards /api/* (frontend/nginx/default.conf.template).
+        # "spring" is the backend Service, so it must exist before this pod starts.
+        - name: BACKEND_URL
+          value: http://spring:8080
+        # Keycloak as seen by the BROWSER, served to it as /config.json (see Keycloak.md).
+        # Must match the public host in keycloak-ingress-letsencrypt.yaml.
+        - name: KEYCLOAK_URL
+          value: https://keycloak.tsadimas.dns-cloud.net
+        - name: KEYCLOAK_REALM
+          value: tickets
+        - name: KEYCLOAK_CLIENT_ID
+          value: tickets-frontend
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 500m
+            memory: 128Mi
+        ports:
+        # nginx-unprivileged runs as non-root, so it listens on 8080, not 80
+        - containerPort: 8080
+          name:  vue
+      imagePullSecrets:
+      - name: registry-credentials

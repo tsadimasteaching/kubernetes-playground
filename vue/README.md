@@ -2,7 +2,8 @@
 
 The Vue single-page frontend of the Tickets app, and the **only part reachable from outside the cluster**. The image (built from [frontend/Dockerfile.multistage](../frontend/Dockerfile.multistage)) runs **nginx as a non-root user on port 8080**. nginx serves the static files and forwards every `/api/*` request to the Spring backend, so the browser talks to one origin only and no CORS is needed.
 
-- `vue-deployment.yaml` – the Deployment: image `ghcr.io/tsadimas/cp-vue:2026`, `BACKEND_URL=http://spring:8080`, `KEYCLOAK_URL=http://keycloak.localhost:8080` (served to the browser as `/config.json`, see [Keycloak.md](../Keycloak.md#where-is-keycloak-configjson)), readiness/liveness probes on `/`, resource limits, `imagePullSecrets: registry-credentials`
+- `vue-deployment.yaml` – the Deployment: image `ghcr.io/tsadimas/cp-vue:keycloak`, `BACKEND_URL=http://spring:8080`, `KEYCLOAK_URL=http://keycloak.localhost:8080` (served to the browser as `/config.json`, see [Keycloak.md](../Keycloak.md#where-is-keycloak-configjson)), readiness/liveness probes on `/`, resource limits, `imagePullSecrets: registry-credentials`
+- `vue-deployment-letsencrypt.yaml` – same Deployment with `KEYCLOAK_URL=https://keycloak.tsadimas.dns-cloud.net`; apply instead of `vue-deployment.yaml` when using `vue-ingress-letsencrypt.yaml`
 - `vue-svc.yaml` – ClusterIP Service `vue-svc`, port **9000** → container port **8080** (port name `vue`)
 - `vue-ingress.yaml` – **HTTP** Ingress for `vue.local` and `vue.localhost` (Traefik entrypoint `web`, port 80). Use `vue.localhost` in the browser: the Keycloak login needs a secure context, see [Keycloak.md](../Keycloak.md#why-localhost-host-names). For minikube, Codespaces or any cluster without a public DNS name
 - `vue-ingress-letsencrypt.yaml` – **public HTTPS** for a real DNS name, with a Let's Encrypt certificate and an `http://` → `https://` redirect. Only on a cluster reachable from the internet, see [cert/README.md](../cert/README.md)
@@ -33,7 +34,7 @@ kubectl get deploy,pods,svc -l app=vue
 kubectl get ingress
 ```
 
-On a public cluster, also apply `vue/vue-ingress-letsencrypt.yaml` as described in [cert/README.md](../cert/README.md). Its two Ingresses (HTTPS, and HTTP for the redirect) use the public name, `vue-ingress` uses `vue.local`, so they can coexist.
+On a public cluster, apply `vue/vue-deployment-letsencrypt.yaml` and `vue/vue-ingress-letsencrypt.yaml` as described in [Keycloak.md → Public HTTPS](../Keycloak.md#7-public-https) and [cert/README.md](../cert/README.md). The two Ingresses (HTTPS, and HTTP for the redirect) use the public name, `vue-ingress` uses `vue.local`, so they can coexist.
 
 ---
 
